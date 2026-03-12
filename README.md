@@ -12,13 +12,13 @@ Simulates strong gravitational lensing events across 4 NIRCam bands (F115W, F150
 
 Each output image is 125x125 pixels at 0.03"/pix across all bands.
 
-## Pipeline versions
+## Pipeline history
 
-| Version | Script | Key features |
-|---------|--------|-------------|
-| v1 | `test_generate.ipynb` | Single-band F115W, Gaussian PSF, SIS lens |
-| v2 | `simulate_multiband.py` | 4 bands, empirical PSF, SIE+shear, SLACS params |
-| **v3** | **`simulate_v3.py`** | **COWLS-calibrated params, deep DR0.5 mosaic backgrounds** |
+The current pipeline (v3) evolved through three iterations — see `Summary.txt` for full details:
+
+1. **v1** — Single-band F115W, Gaussian PSF, SIS lens
+2. **v2** — 4 bands, empirical PSF, SIE+shear, SLACS params
+3. **v3 (current)** — COWLS-calibrated params, deep DR0.5 mosaic backgrounds
 
 ## Setup
 
@@ -73,10 +73,10 @@ Then open a pull request on GitHub to merge into `main`.
 
 | File | Purpose |
 |------|---------|
-| `simulate_v3.py` | Current (v3) simulation pipeline |
+| `simulate_v3.py` | Current simulation pipeline |
 | `prep_mosaic.py` | Extract backgrounds/PSFs from DR0.5 mosaics |
-| `simulate_multiband.py` | v2 pipeline (preserved) |
-| `prep_cosmicwebb.py` | v2 data prep (single detector files) |
+| `regen_v3_preview.py` | Regenerate preview from saved .npy files |
+| `eval_generative.ipynb` | Evaluation notebook |
 | `train_cvae.py` | CVAE training script |
 | `Summary.txt` | Full documentation of all pipeline steps |
 
