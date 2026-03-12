@@ -40,12 +40,18 @@ Usage:
 import os
 os.environ['NUMBA_DISABLE_JIT'] = '1'
 
+import sys
 import json
 import time
 import argparse
 from pathlib import Path
 
 import numpy as np
+
+# Parse --size early (needed for module-level config before main)
+IMAGE_SIZE = 125
+if '--size' in sys.argv:
+    IMAGE_SIZE = int(sys.argv[sys.argv.index('--size') + 1])
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -58,6 +64,7 @@ from lenstronomy.LensModel.lens_model import LensModel
 from lenstronomy.Data.imaging_data import ImageData
 from lenstronomy.Data.psf import PSF
 from lenstronomy.Cosmo.lens_cosmo import LensCosmo
+import multiprocessing as mp
 
 # ── Version ───────────────────────────────────────────────────────────────
 
@@ -66,8 +73,8 @@ REFERENCE = 'Nightingale+2025 (COWLS, MNRAS 543, 203)'
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 
-PREPPED_DIR = Path('prepped_mosaic')
-OUT_DIR     = Path('output/v3')
+PREPPED_DIR = Path('prepped_mosaic') if IMAGE_SIZE == 125 else Path(f'prepped_mosaic_{IMAGE_SIZE}')
+OUT_DIR     = Path('output/v3') if IMAGE_SIZE == 125 else Path(f'output/v3_{IMAGE_SIZE}')
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 BANDS = ['F115W', 'F150W', 'F277W', 'F444W']
@@ -85,7 +92,7 @@ sum_to_flux = 6.501853565914121   # nJy -> sim unit conversion
 BAND_CONFIG = {}
 for band in BANDS:
     info = BAND_INFO[band]
-    pixels = 125       # all bands at 30mas in DR0.5 mosaics
+    pixels = IMAGE_SIZE  # all bands at 30mas in DR0.5 mosaics
     pixel_scale = 0.03 # common pixel scale
 
     pixar_sr = info['pixar_sr']
@@ -460,11 +467,40 @@ def simulate_one_multiband(lensed=True, seed=None):
     return band_results, theta_E, z_lens, z_source, mass, mStar, uv_slope
 
 
+# ── Parallel worker ───────────────────────────────────────────────────
+
+def _simulate_worker(args):
+    """Worker function for parallel simulation."""
+    idx, lensed, seed, noise_seed = args
+    result = simulate_one_multiband(lensed=lensed, seed=seed)
+    band_results, theta_E, z_lens, z_source, mass, mStar, uv_slope = result
+
+    rng_noise = np.random.default_rng(noise_seed)
+
+    out = {'idx': idx, 'label': 1.0 if lensed else 0.0,
+           'theta_E': theta_E, 'z_lens': z_lens, 'z_source': z_source, 'mass': mass,
+           'images': {}, 'sources': {}, 'clean': {}}
+
+    # Same background index for all bands (spatially matched patches)
+    bg_idx = int(rng_noise.integers(len(backgrounds[BANDS[0]])))
+
+    for band in BANDS:
+        img = band_results[band]['image']
+        img_noisy = add_poisson_noise(img, band, rng=rng_noise)
+        bg = backgrounds[band][bg_idx]
+        out['images'][band] = (img_noisy + bg).astype(np.float32)
+        out['sources'][band] = band_results[band]['image_source'].astype(np.float32)
+        out['clean'][band] = img_noisy.astype(np.float32)
+
+    return out
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--n', type=int, default=10, help='Number of images (half lensed, half not)')
+    parser.add_argument('--size', type=int, default=125, help='Image size in pixels (default: 125)')
     args = parser.parse_args()
 
     N = args.n
@@ -477,64 +513,79 @@ def main():
     print(f"  theta_E filter: [{THETA_E_LO}, {THETA_E_HI}] arcsec")
     print(f"  log_mass ~ U({LOGMASS_LO}, {LOGMASS_HI})")
 
-    # Storage
-    all_images = {band: np.zeros((N, BAND_CONFIG[band]['pixels'], BAND_CONFIG[band]['pixels']),
-                                 dtype=np.float32) for band in BANDS}
-    all_sources = {band: np.zeros_like(all_images[band]) for band in BANDS}
-    all_clean = {band: np.zeros_like(all_images[band]) for band in BANDS}  # sim only, no background
+    # Storage — use memory-mapped .npy files for large image arrays
+    all_images = {}
+    all_sources = {}
+    for band in BANDS:
+        p = BAND_CONFIG[band]['pixels']
+        all_images[band] = np.lib.format.open_memmap(
+            str(OUT_DIR / f'images_{band}.npy'), mode='w+', dtype=np.float32, shape=(N, p, p))
+        all_sources[band] = np.lib.format.open_memmap(
+            str(OUT_DIR / f'sources_{band}.npy'), mode='w+', dtype=np.float32, shape=(N, p, p))
+
     labels = np.zeros(N)
     theta_Es = np.zeros(N)
     z_lenses = np.zeros(N)
     z_sources = np.zeros(N)
     masses = np.zeros(N)
-    sigma_vs = np.zeros(N)  # v3: also save velocity dispersions
 
+    # Keep a few clean images for preview
+    preview_clean = {band: [] for band in BANDS}
+    preview_lensed_idx = []
+
+    # Pre-generate seeds for reproducibility
     rng_main = np.random.default_rng(99)
-    jobs = ([(i, False) for i in range(N_EACH)] +
-            [(i + N_EACH, True) for i in range(N_EACH)])
+    jobs = []
+    for i in range(N_EACH):
+        seed = int(rng_main.integers(int(1e9)))
+        noise_seed = int(rng_main.integers(int(1e9)))
+        jobs.append((i, False, seed, noise_seed))
+    for i in range(N_EACH):
+        seed = int(rng_main.integers(int(1e9)))
+        noise_seed = int(rng_main.integers(int(1e9)))
+        jobs.append((i + N_EACH, True, seed, noise_seed))
 
+    # Parallel generation
+    n_workers = mp.cpu_count()
+    ctx = mp.get_context('fork')
+    chunksize = max(1, min(50, N // (n_workers * 4)))
+    print(f"  Using {n_workers} workers (fork), chunksize={chunksize}")
+
+    done = 0
     t0 = time.time()
-    for idx, lensed in jobs:
-        label = 'lensed' if lensed else 'non-lensed'
-        print(f'  [{idx+1}/{N}] {label}...', end=' ', flush=True)
-        t1 = time.time()
 
-        result = simulate_one_multiband(lensed=lensed, seed=int(rng_main.integers(int(1e9))))
-        band_results, theta_E, z_lens, z_source, mass, mStar, uv_slope = result
+    with ctx.Pool(n_workers) as pool:
+        for result in pool.imap_unordered(_simulate_worker, jobs, chunksize=chunksize):
+            idx = result['idx']
+            for band in BANDS:
+                all_images[band][idx] = result['images'][band]
+                all_sources[band][idx] = result['sources'][band]
+            labels[idx] = result['label']
+            theta_Es[idx] = result['theta_E']
+            z_lenses[idx] = result['z_lens']
+            z_sources[idx] = result['z_source']
+            masses[idx] = result['mass']
 
-        rng_noise = np.random.default_rng(int(rng_main.integers(int(1e9))))
+            # Store first 5 lensed clean images for preview
+            if result['label'] == 1.0 and len(preview_lensed_idx) < 5:
+                preview_lensed_idx.append(idx)
+                for band in BANDS:
+                    preview_clean[band].append(result['clean'][band])
 
-        for band in BANDS:
-            img = band_results[band]['image']
-            img_noisy = add_poisson_noise(img, band, rng=rng_noise)
-            bg = get_background(band)
-            all_images[band][idx] = img_noisy + bg
-            all_sources[band][idx] = band_results[band]['image_source']
-            all_clean[band][idx] = img_noisy  # simulation + noise, no background
-
-        labels[idx] = 1.0 if lensed else 0.0
-        theta_Es[idx] = theta_E
-        z_lenses[idx] = z_lens
-        z_sources[idx] = z_source
-        masses[idx] = mass
-
-        arc_ratio = ''
-        if lensed:
-            src_sum = np.sum(np.clip(band_results['F115W']['image_source'], 0, None))
-            lens_sum = np.sum(np.clip(band_results['F115W']['image'] - band_results['F115W']['image_source'], 0, None))
-            if lens_sum > 0:
-                arc_ratio = f'  arc/lens={src_sum/lens_sum:.3f}'
-
-        # Print SED color ratios for first lensed image
-        sed_info = ''
-        if lensed and idx == N_EACH:
-            src_colors = starforming_color_ratios(z_source, uv_slope=uv_slope)
-            sed_info = f'\n    src SED (β={uv_slope:.2f}): ' + ' '.join(f'{b}={src_colors[b]:.2f}' for b in BANDS)
-
-        print(f'{time.time()-t1:.1f}s  θE={theta_E:.2f}" zl={z_lens:.2f} zs={z_source:.2f}{arc_ratio}{sed_info}')
+            done += 1
+            if done % 100 == 0 or done == N:
+                elapsed = time.time() - t0
+                rate = done / elapsed
+                eta = (N - done) / rate if rate > 0 else 0
+                print(f'  [{done}/{N}] {elapsed:.0f}s elapsed, {rate:.1f} img/s, ETA {eta/60:.0f}m')
 
     total = time.time() - t0
     print(f'\nDone — {N} images in {total:.1f}s ({total/N:.2f}s/image)')
+
+    # Flush memmaps
+    for band in BANDS:
+        all_images[band].flush()
+        all_sources[band].flush()
 
     # Print parameter summary
     lensed_mask = labels == 1
@@ -543,10 +594,8 @@ def main():
     print(f'  z_source: {z_sources[lensed_mask].min():.2f} - {z_sources[lensed_mask].max():.2f}  (mean {z_sources[lensed_mask].mean():.2f})')
     print(f'  theta_E:  {theta_Es[lensed_mask].min():.2f} - {theta_Es[lensed_mask].max():.2f}  (mean {theta_Es[lensed_mask].mean():.2f})')
 
-    # ── Save ─────────────────────────────────────────────────────────
-    for band in BANDS:
-        np.save(str(OUT_DIR / f'images_{band}.npy'), all_images[band])
-        np.save(str(OUT_DIR / f'sources_{band}.npy'), all_sources[band])
+    # ── Save metadata arrays ─────────────────────────────────────────
+    # (images/sources already on disk via memmap)
     np.save(str(OUT_DIR / 'lensed.npy'), labels)
     np.save(str(OUT_DIR / 'theta_Es.npy'), theta_Es)
     np.save(str(OUT_DIR / 'z_lens.npy'), z_lenses)
@@ -579,9 +628,8 @@ def main():
             print(f'  {f.name:<30} {f.stat().st_size/1e6:.1f} MB')
 
     # ── Preview ──────────────────────────────────────────────────────
-    order_nl = np.where(labels == 0)[0]
-    order_l = np.where(labels == 1)[0]
-    n_show = min(5, len(order_nl), len(order_l))
+    order_l = np.array(preview_lensed_idx)
+    n_show = min(5, len(order_l))
 
     # 11 rows: 4 bands + RGB clean sim + RGB lensed + RGB arcs + RGB lens-only + RGB arcs boosted + lens-sub + arc-only
     fig, axs = plt.subplots(11, n_show, figsize=(4*n_show, 46), dpi=100)
@@ -658,7 +706,7 @@ def main():
     # Row 4: RGB clean simulation (lens + arcs + noise, NO background)
     for col in range(n_show):
         idx = order_l[col]
-        clean_imgs = {band: all_clean[band][idx] for band in BANDS}
+        clean_imgs = {band: preview_clean[band][col] for band in BANDS}
         r, g, b = _rgb_channels(clean_imgs, _norm)
         rgb = make_rgb(r, g, b, stretch=0.1, Q=10, sat_boost=1.5, percentile_bg=0)
         show_rgb(axs[4, col], rgb,

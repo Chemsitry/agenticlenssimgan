@@ -4,6 +4,7 @@
 # Data (too large for git)
 raw_data/
 prepped_mosaic/
+prepped_mosaic_*/
 prepped_cosmicwebb/
 prepped/
 output/
