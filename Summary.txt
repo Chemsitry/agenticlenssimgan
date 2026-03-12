@@ -1,0 +1,625 @@
+================================================================================
+  DATA PREPARATION SUMMARY
+  JWST Real Background Integration for Gravitational Lensing Simulations
+  Date: February 26, 2026
+================================================================================
+
+OVERVIEW
+--------
+This document summarizes the steps taken to download, process, and integrate
+real James Webb Space Telescope (JWST) imaging data into a gravitational lens
+simulation pipeline. The goal is to replace synthetic backgrounds in an
+existing simulation notebook with real JWST sky patches, producing more
+realistic training data for a gravitational lens classifier.
+
+
+--------------------------------------------------------------------------------
+STEP 1: DATA ACQUISITION
+--------------------------------------------------------------------------------
+
+Source:
+  MAST (Mikulski Archive for Space Telescopes) — program jw01810, observation 2,
+  target 2. Downloaded as a single zip archive: MAST_2026-02-26T2313.zip (2.9 GB).
+
+Extracted contents — 7 JWST NIRCam mosaics (Level 3, i2d pipeline products):
+
+  Filter   Wavelength   Pixel Scale   Image Size        File Size
+  -------  -----------  ------------  ----------------  ---------
+  F090W    ~0.9 µm      0.031"/pix    9887 × 4390 px    1.1 GB
+  F115W    ~1.15 µm     0.031"/pix    9887 × 4390 px    1.1 GB
+  F150W    ~1.5 µm      0.031"/pix    9887 × 4390 px    1.1 GB
+  F200W    ~2.0 µm      0.031"/pix    9887 × 4390 px    1.1 GB
+  F277W    ~2.77 µm     0.063"/pix    4384 × 9883 px    275 MB
+  F356W    ~3.56 µm     0.063"/pix    4384 × 9883 px    275 MB
+  F444W    ~4.44 µm     0.063"/pix    4384 × 9883 px    275 MB
+
+  Total extracted size: ~5.4 GB
+  Flux units: MJy/sr (native JWST pipeline output)
+  Pixel area: PIXAR_SR = 2.292e-14 sr/pix (from FITS header keyword PIXAR_SR)
+
+FITS structure (each file, example F200W):
+  HDU 0  PRIMARY       — 271 header keywords, no data
+  HDU 1  SCI           — Science image (float32), 9887 × 4390 px
+  HDU 2  ERR           — Total error array
+  HDU 3  CON           — Context map (which exposures contributed)
+  HDU 4  WHT           — Weight map
+  HDU 5  VAR_POISSON   — Poisson noise variance
+  HDU 6  VAR_RNOISE    — Read noise variance
+  HDU 7  VAR_FLAT      — Flat field variance
+  HDU 8  HDRTAB        — Per-exposure header table
+  HDU 9  ASDF          — Calibration metadata blob
+
+Rationale for F115W:
+  The existing simulation notebook was built around JWST NIRCam F115W (matching
+  the Williams et al. 2018 GOODS-S simulated image and VELA galaxy templates
+  in that filter). All preprocessing focused on the F115W mosaic.
+
+
+--------------------------------------------------------------------------------
+STEP 2: BACKGROUND CHARACTERIZATION
+--------------------------------------------------------------------------------
+
+Tool: prep_jwst.py (custom preprocessing script)
+
+  a) Sky background measurement
+     - Loaded the F115W SCI extension into memory
+     - Built a validity mask: pixels where data is finite AND weight > 0
+     - Applied sigma-clipped statistics (σ=3, 5 iterations) on a 1-in-100
+       subsample of valid pixels to measure the sky level
+
+     Results:
+       background_mean   = 0.294924 MJy/sr
+       background_rms    = 0.008549 MJy/sr
+       (saved to prepped/background_mean.npy and prepped/background_rms.npy)
+
+  b) Unit conversion derivation
+     The simulation notebook works in internal flux units where:
+       1 simulation unit = 1/sum_to_flux nJy = 1/6.502 nJy ≈ 0.154 nJy/pixel
+
+     Conversion from real JWST MJy/sr to simulation units:
+       nJy/pixel = MJy/sr × PIXAR_SR × 10^15
+       sim_units = nJy/pixel × sum_to_flux
+       → scale factor = PIXAR_SR × 10^15 × sum_to_flux ≈ 149.0
+
+     This factor is applied when the real backgrounds are loaded in the
+     simulation notebook.
+
+
+--------------------------------------------------------------------------------
+STEP 3: REAL BACKGROUND PATCH EXTRACTION
+--------------------------------------------------------------------------------
+
+  Method:
+    - Randomly sampled 125 × 125 pixel patch centers from the F115W mosaic
+    - Required ALL pixels in the patch to be valid (finite, weight > 0)
+      — no source masking, so patches include real faint galaxies
+    - Subtracted background_mean from each patch (zero-mean normalization)
+    - Collected 5,000 patches in 7,199 random attempts
+
+  Why include faint galaxies (no source masking):
+    The original sim_background() function was designed to render environmental
+    galaxies from a mock catalog around a random field galaxy. Real JWST patches
+    naturally contain real faint background galaxies, making them a more realistic
+    and direct replacement for the rendered mock backgrounds.
+
+  Output: prepped/real_backgrounds.npy
+    Shape: (5000, 125, 125), dtype: float32, size: 298 MB
+
+
+--------------------------------------------------------------------------------
+STEP 4: EMPIRICAL PSF EXTRACTION
+--------------------------------------------------------------------------------
+
+  Method (pure numpy, no scipy required):
+    - Identified all pixels above a 20-sigma bright threshold
+    - For each bright pixel, checked if it was a local maximum in a 5×5 window
+    - Enforced isolation: no other bright pixel within 31 pixels (half stamp size)
+    - Required compactness: ≥50% of flux within r < 10 px of center
+      (selects unresolved point sources / stars, rejects extended galaxies)
+    - Extracted 63 × 63 pixel stamps around each candidate
+    - Subtracted sky background and normalized each stamp to unit flux sum
+    - Collected 200 PSF star stamps
+
+  Output: prepped/psf_stars.npy
+    Shape: (200, 63, 63), dtype: float32, size: 3.2 MB
+
+  Note: PSF integration into lenstronomy (replacing the Gaussian PSF currently
+  used in the simulation notebook) is a planned future step.
+
+
+--------------------------------------------------------------------------------
+STEP 5: SIMULATION NOTEBOOK INTEGRATION
+--------------------------------------------------------------------------------
+
+  The existing simulation notebook (simulations (1).ipynb) was modified to
+  replace the sim_background() function with real JWST backgrounds.
+
+  Changes made:
+
+  a) New cell inserted (after kwargs setup cell):
+     - Loads prepped/real_backgrounds.npy
+     - Applies unit conversion scale factor (≈149.0)
+     - Defines get_real_background() as a drop-in replacement for sim_background()
+
+       Code:
+         real_bgs     = np.load(REAL_BG_PATH)
+         PIXAR_SR     = 2.29232933396454e-14
+         mjysr_to_sim = PIXAR_SR * 1e15 * sum_to_flux   # ≈ 149.0
+         real_bgs_sim = (real_bgs * mjysr_to_sim).astype(np.float32)
+
+         def get_real_background():
+             return real_bgs_sim[_bg_rng.integers(len(real_bgs_sim))]
+
+  b) Test visualization cell (cell-10):
+     sim_background(exp_time=1200)  →  get_real_background()
+
+  c) Main generation loop (cell-12):
+     back_gals = sim_background(exp_time=exp_time)  →  get_real_background()
+
+  Path note:
+     REAL_BG_PATH is set to home + "JWST/prepped/real_backgrounds.npy"
+     This must be updated to the correct path when running on the cluster.
+
+
+--------------------------------------------------------------------------------
+STEP 6: STANDALONE TEST NOTEBOOK
+--------------------------------------------------------------------------------
+
+  File: test_generate.ipynb
+
+  Purpose:
+    A self-contained test notebook that generates 5 lensed + 5 non-lensed
+    images without requiring NERSC cluster resources (no CosmoDC2, no VELA).
+
+  Key design choices:
+
+  a) No CosmoDC2 catalog required:
+     - Lens redshifts sampled from Uniform(0.1, 0.8)
+     - Source redshifts sampled from truncated Normal(loc=1.5, scale=3)
+     - Halo masses sampled from log-Uniform(10^13, 10^14.5 M_sun)
+     - Ellipticities, Sérsic indices, radii sampled from matching distributions
+
+  b) No VELA images required:
+     - Both lens and source rendered as Sérsic ellipse profiles
+       (equivalent to sersic_source=True in the original notebook)
+
+  c) Lensed vs. non-lensed distinction (matching original notebook):
+     - Non-lensed: lens galaxy light only, source amplitude set to 0
+     - Lensed: lens galaxy light + lensed arcs (θE enforced in 0.5–1.5″ range)
+     - Arc brightness boosted by scale_up = 10^Uniform(0,2) (random 1x–100x)
+
+  d) Apple Silicon (M3) considerations:
+     - numpy on macOS with Homebrew Python automatically uses Apple's Accelerate
+       framework (vecLib BLAS) for matrix operations — no extra setup needed
+     - Multiprocessing (mp.Pool) was attempted but does not work inside Jupyter
+       on macOS (spawn-based pickling of notebook-defined functions fails)
+     - Sequential execution used instead; 10 images complete in <1 second
+
+  e) Environment:
+     - System Homebrew Python 3.14 has a broken scipy installation that
+       conflicts with numba, lenstronomy, and astropy.convolution
+     - Solution: isolated virtual environment (.venv/) with clean installs of
+       numpy, scipy, astropy, lenstronomy, matplotlib, jupyter, nbconvert
+     - Notebooks must be run with .venv/bin/jupyter to use the clean environment
+
+  Outputs saved to output/:
+    images.npy        (10, 125, 125) — full simulated images
+    image_source.npy  (10, 125, 125) — arc-only images (no lens light)
+    lensed.npy        (10,)          — labels: 0 = non-lensed, 1 = lensed
+    theta_Es.npy      (10,)          — Einstein radii in arcseconds
+    z_lens.npy        (10,)          — lens redshifts
+    z_source.npy      (10,)          — source redshifts
+    masses.npy        (10,)          — halo masses in solar masses
+    preview.png                      — 3-row visualization (see below)
+
+  Visualization (output/preview.png) — 3 rows:
+    Row 1: Non-lensed full images (√ stretch)
+    Row 2: Lensed full images (√ stretch) — arcs present but faint under lens
+    Row 3: Arc-only images (inferno colormap, linear) — arcs clearly visible
+
+
+--------------------------------------------------------------------------------
+STEP 7: VISUAL VERIFICATION OF RESULTS
+--------------------------------------------------------------------------------
+
+  The test run confirmed:
+    - Non-lensed images show smooth elliptical lens galaxies with no arc structure
+    - Lensed images show the same lens galaxies with Einstein rings/arcs
+    - Arc-only diagnostic images clearly show ring and arc morphologies at
+      Einstein radii ranging from 0.51″ to 1.06″
+    - Real JWST backgrounds are present in all images (real noise + faint galaxies)
+
+  Known limitation:
+    The arcs are faint relative to the lens galaxy light in the full images.
+    This is physically realistic — gravitational lens arcs are genuinely
+    challenging to detect against the bright lens galaxy, which is why a
+    machine learning classifier is needed.
+
+
+--------------------------------------------------------------------------------
+FILES PRODUCED
+--------------------------------------------------------------------------------
+
+  prepped/
+    real_backgrounds.npy    (5000, 125, 125) float32  — 298 MB
+    background_rms.npy      scalar float32            — sky noise in MJy/sr
+    background_mean.npy     scalar float32            — sky level in MJy/sr
+    psf_stars.npy           (200, 63, 63) float32     — 3.2 MB
+
+  output/
+    images.npy              (10, 125, 125) float32
+    image_source.npy        (10, 125, 125) float32
+    lensed.npy              (10,) float64
+    theta_Es.npy            (10,) float64
+    z_lens.npy              (10,) float64
+    z_source.npy            (10,) float64
+    masses.npy              (10,) float64
+    preview.png
+
+  prep_jwst.py              — standalone preprocessing script for the JWST mosaics
+  test_generate.ipynb       — self-contained test notebook (5+5 images, local)
+  simulations (1).ipynb     — original simulation notebook (modified for real bkgs)
+  .venv/                    — clean Python virtual environment
+
+
+--------------------------------------------------------------------------------
+FUTURE STEPS / KNOWN ISSUES
+--------------------------------------------------------------------------------
+
+  1. Unit scaling validation:
+     The scale factor (≈149.0) converting MJy/sr to simulation flux units was
+     derived from FITS header keywords. The sum_to_flux = 6.502 calibration
+     constant in the simulation notebook was derived from the Williams et al.
+     (2018) synthetic GOODS-S dataset, not from the jw01810 data. This should
+     be re-validated before large-scale training data generation.
+
+  2. PSF integration:
+     psf_stars.npy contains 200 empirical PSF stamps extracted from the real
+     F115W mosaic. These should replace the Gaussian PSF (fwhm=0.03") currently
+     used in the simulation notebook. lenstronomy supports 'PIXEL' PSF type
+     which accepts an empirical kernel array.
+
+  3. Multi-filter extension:
+     All 7 filters (F090W–F444W) are available. Extending the simulation to
+     produce multi-band image stacks would improve classifier performance.
+
+  4. Scale to full training set:
+     The original notebook was designed to generate ~40,000 images on NERSC.
+     The modified notebook (with get_real_background()) is ready to be run
+     at scale on the cluster once REAL_BG_PATH is updated to the cluster path.
+
+  5. VELA + CosmoDC2 integration:
+     The test notebook uses simplified Sérsic profiles. The full pipeline on
+     the cluster should continue using VELA simulated galaxy images as sources
+     and CosmoDC2 for lens halo parameters, as in the original notebook.
+
+
+--------------------------------------------------------------------------------
+STEP 8: SIMULATE_V2 — IMPROVED SINGLE-BAND PIPELINE (March 2026)
+--------------------------------------------------------------------------------
+
+  File: simulate_v2.ipynb (+ run_simulate_v2.py extracted script)
+
+  Improvements over test_generate.ipynb:
+
+  a) Empirical PSF:
+     - Replaced Gaussian PSF (FWHM=0.06") with median stack of 174 real star
+       stamps (63x63 px) from jw01810 F115W
+     - Used as lenstronomy 'PIXEL' PSF with supersampling_factor=3
+     - Run `python3 build_psf.py` first to generate prepped/psf_median.npy
+
+  b) SIE + SHEAR lens model:
+     - Replaced SIS (perfectly symmetric) with SIE + external shear
+     - Produces realistic asymmetric arcs, partial arcs, off-axis images
+
+  c) SLACS-calibrated parameter distributions:
+     - z_lens   ~ TruncNorm(0.3, 0.15, [0.05, 0.90])
+     - sigma_v  ~ TruncNorm(215, 50, [100, 400]) km/s (drives theta_E)
+     - z_source ~ TruncNorm(1.5, 0.8, [0.6, 3.0])
+     - log M_halo ~ Uniform(11.5, 13.0) — galaxy-scale, NOT cluster-scale
+       (old range 13.0–14.5 was cluster territory, lens light drowned arcs)
+
+  d) Poisson shot noise on simulated components:
+     - Conversion: sim_units -> electrons via PHOTMJSR, XPOSURE, GAIN
+     - SIM_TO_ELEC ≈ 48.7 e-/sim_unit (F115W, jw01810)
+     - np.random.poisson(electrons) applied per pixel before adding background
+     - Real JWST background (which has its own noise) added on top
+
+  e) Arc/lens brightness floor:
+     - ARC_LENS_MIN_RATIO = 1e-2 (arc total flux >= 1% of lens total flux)
+     - Prevents completely undetectable arcs
+
+  f) Preview display:
+     - Switched from sqrt stretch to asinh stretch (AsinhNorm)
+     - Compresses bright lens core, reveals faint arcs
+     - 6-row preview: linear + asinh + lens-subtracted + arc-only
+
+  Arc visibility note:
+     The lens galaxy peak pixel is typically 100–500x brighter than the arc
+     peak pixel. This is physically realistic for SLACS-like systems. The arcs
+     are present in the data but invisible in linear display — exactly why ML
+     models are needed for lens finding. The lens-subtracted view (row 5)
+     confirms arcs are present with correct morphology.
+
+
+--------------------------------------------------------------------------------
+STEP 9: MULTI-BAND COSMOS-WEB PIPELINE (March 2026)
+--------------------------------------------------------------------------------
+
+  Files:
+    prep_cosmicwebb.py      — downloads + preps backgrounds/PSFs from COSMOS-Web
+    simulate_multiband.py   — multi-band simulation (F115W, F150W, F277W, F444W)
+
+  a) Data source: COSMOS-Web (JWST program 1727)
+     - Replaced jw01810 (JADES) with COSMOS-Web survey data
+     - Downloaded one i2d detector image per band (~119 MB each, ~480 MB total)
+     - Individual detector files: 2058x2058 (SW), 2068x2075 (LW)
+
+  b) Per-band calibration (from FITS headers):
+
+     Band    Pixel Scale  PIXAR_SR        PHOTMJSR  XPOSURE   Patch Size
+     ------  -----------  --------------  --------  -------   ----------
+     F115W   0.031"/pix   2.240e-14 sr    3.239     257.7s    125x125
+     F150W   0.031"/pix   2.292e-14 sr    2.333     257.7s    125x125
+     F277W   0.063"/pix   9.300e-14 sr    0.491     257.7s    63x63
+     F444W   0.063"/pix   9.329e-14 sr    0.371     257.7s    63x63
+
+     SW bands (F115W, F150W): 0.031"/pix, 125x125 px = 3.875" FoV
+     LW bands (F277W, F444W): 0.063"/pix, 63x63 px   = 3.969" FoV
+
+  c) Background extraction (prep_cosmicwebb.py):
+     - 2,000 patches per band from COSMOS-Web detector images
+     - Background-subtracted (sigma-clipped median removed)
+     - 95% valid pixel threshold
+     - Stored in prepped_cosmicwebb/<band>/backgrounds.npy
+
+  d) Per-band empirical PSF (prep_cosmicwebb.py):
+     - PSF star extraction: 20-sigma detection, local maxima, isolation check,
+       compactness (>50% flux within r<10 px), normalized to unit sum
+     - F115W: 18 stars -> (63, 63) median PSF
+     - F150W: 30 stars -> (63, 63) median PSF
+     - F277W: 50 stars -> (31, 31) median PSF
+     - F444W: 50 stars -> (31, 31) median PSF
+     - Stored in prepped_cosmicwebb/<band>/psf_median.npy
+
+  e) SED-dependent flux scaling (simulate_multiband.py):
+     - Lens galaxy (elliptical): red SED, brighter at longer wavelengths
+       F115W=1.0, F150W~1.4, F277W~2.1, F444W~2.4 (z-dependent)
+     - Source galaxy (star-forming): blue SED, relatively brighter at shorter λ
+       F115W=1.0, F150W~0.85, F277W~0.4, F444W~0.25 (z-dependent)
+     - Calibrated in F115W, then scaled per band using color ratios
+
+  f) Per-band Poisson noise:
+     - SIM_TO_ELEC computed per band using each band's PHOTMJSR and XPOSURE
+     - F115W: 1.12 e-/sim_unit,  F150W: 1.52,  F277W: 1.78,  F444W: 2.35
+     - Note: lower than jw01810 (~48.7) because COSMOS-Web has shorter
+       exposures (258s vs 10994s)
+
+  g) Output structure (output/multiband/):
+     images_F115W.npy    (N, 125, 125)  — full images per band
+     images_F150W.npy    (N, 125, 125)
+     images_F277W.npy    (N, 63, 63)
+     images_F444W.npy    (N, 63, 63)
+     sources_F115W.npy   (N, 125, 125)  — arc-only per band (ground truth)
+     sources_F150W.npy   (N, 125, 125)
+     sources_F277W.npy   (N, 63, 63)
+     sources_F444W.npy   (N, 63, 63)
+     lensed.npy, theta_Es.npy, z_lens.npy, z_source.npy, masses.npy
+     preview.png         — 8-row preview (4 bands + RGB lensed + RGB arcs
+                           + lens-subtracted + arc-only)
+     preview_same_brightness.png — sanity check (arcs boosted to lens peak)
+
+  Usage:
+     .venv/bin/python3 prep_cosmicwebb.py              # extract backgrounds + PSFs
+     .venv/bin/python3 simulate_multiband.py            # 10 test images
+     .venv/bin/python3 simulate_multiband.py --n 2000   # full dataset
+
+
+--------------------------------------------------------------------------------
+STEP 10: RGB COLOR FIX — PIXEL SOLID ANGLE NORMALIZATION (March 2026)
+--------------------------------------------------------------------------------
+
+  Problem:
+    RGB composite images (R=F277W, G=F150W, B=F115W) showed everything
+    appearing red — including arc-only rows that should be blue. The professor
+    noted: "arcs generally have a different color from the lenses — typically
+    the arcs are bluer."
+
+  Root cause — pixel solid angle mismatch:
+    LW channel pixels (F277W, F444W at 0.063"/pix) have ~4x the solid angle
+    of SW channel pixels (F115W, F150W at 0.031"/pix):
+
+      PIXAR_SR_F277W = 9.30e-14 sr/pix
+      PIXAR_SR_F115W = 2.24e-14 sr/pix   (ratio ~ 4.15x)
+
+    When building the RGB, the F277W image (63x63) was upsampled to 125x125
+    using scipy.ndimage.zoom, but per-pixel values were NOT normalized for
+    the different pixel solid angles. Each F277W pixel covers ~4x the sky
+    area, so its per-pixel surface brightness is ~4x higher for the same
+    physical flux density. This inflated the red channel in the RGB.
+
+  Fix (simulate_multiband.py, lines 533-555):
+    Before building the RGB composite, divide each band's image by its
+    mjysr_to_sim factor (proportional to PIXAR_SR), converting all bands to
+    the same MJy/sr surface brightness units:
+
+      rgb = make_rgb(
+          images_F277W / BAND_CONFIG['F277W']['mjysr_to_sim'],   # R
+          images_F150W / BAND_CONFIG['F150W']['mjysr_to_sim'],   # G
+          images_F115W / BAND_CONFIG['F115W']['mjysr_to_sim'],   # B
+      )
+
+    mjysr_to_sim values used:
+      F115W: 145.6    F150W: 149.0    F277W: 604.7    F444W: 606.6
+
+    Dividing F277W by 604.7 vs F115W by 145.6 removes the ~4x solid angle
+    bias, so the RGB color ratios now correctly reflect the SED color ratios.
+
+  Color-preserving RGB rendering (make_rgb function):
+    1. Compute luminance L = R + G + B
+    2. Apply asinh stretch to L (compresses dynamic range for display)
+    3. Redistribute stretched luminance back to R/G/B channels preserving
+       the original R:G:B ratio at each pixel
+    Result: elliptical lenses appear red/orange, star-forming arcs appear
+    blue/cyan — matching physical expectations for their stellar populations.
+
+  Verified result:
+    - preview.png row 5 (RGB lensed): lens galaxies appear warm/reddish-orange
+    - preview.png row 6 (RGB arcs): arcs clearly appear blue/cyan
+    - preview_same_brightness.png: when arcs are boosted to match lens peak
+      brightness, the color contrast is unambiguous (blue arcs vs red lens)
+
+  New file: make_same_brightness_preview.py
+    Standalone script to regenerate preview_same_brightness.png from saved
+    .npy arrays without re-running the full simulation.
+
+
+
+
+--------------------------------------------------------------------------------
+STEP 11: v3 — COWLS-CALIBRATED PARAMETERS (March 2026)
+--------------------------------------------------------------------------------
+
+  Reference:
+    Nightingale et al. 2025, MNRAS 543, 203-222
+    "The COSMOS-Web Lens Survey (COWLS) I: discovery of >100 high redshift
+    strong lenses in contiguous JWST imaging"
+
+  The COWLS paper searched the same COSMOS-Web JWST data (program 1727,
+  F115W/F150W/F277W/F444W) we use for backgrounds and PSFs. They found
+  >100 strong lens candidates with properties that differ significantly
+  from the SLACS sample that v2 was calibrated to.
+
+  Key COWLS findings that drove parameter changes:
+    - ~50% of lens galaxies above z=1, some beyond z=2
+    - Source galaxies span z~0.1 to z~9 (epoch of reionization)
+    - Einstein radii mostly below 1.0" (SLACS: typically above 0.8")
+    - Lower stellar masses than SLACS (most log M* < 11, vs SLACS > 11)
+    - Lens magnitudes F444W 16-22 AB (SLACS: 15-17 AB)
+    - Same lens model: SIE + external shear
+
+  a) Parameter changes (v2 -> v3):
+
+     Parameter    v2 (SLACS)                        v3 (COWLS)
+     ----------   --------------------------------  --------------------------------
+     z_lens       TruncNorm(0.3, 0.15, [0.05,0.9])  TruncNorm(0.7, 0.4, [0.05,2.5])
+     z_source     TruncNorm(1.5, 0.8, [0.6, 3.0])   TruncNorm(2.5, 1.5, [0.5, 7.0])
+     sigma_v      TruncNorm(215, 50, [100, 400])     TruncNorm(180, 50, [80, 350])
+     theta_E      filter [0.5, 1.5]"                  filter [0.2, 1.5]"
+     log M_halo   U(11.5, 13.0)                       U(11.0, 13.0)
+     SED source   linear z-scaling                     Lyman-break aware (dropout)
+
+  b) Lyman-break aware source SED (starforming_color_ratios):
+     - At z > ~3.5, Lyman break enters F115W -> flux drops to near-zero
+     - At z > ~5, Lyman break enters F150W
+     - At z > ~6.5, Lyman break reaches F277W
+     - Produces realistic "HST-dark" red sources that COWLS reports at z > 4
+     - Below the break: strong IGM absorption (flux ~ 0)
+     - Above the break: blue UV slope (f_nu ~ lambda^-0.5)
+
+  c) Results from 10 test images:
+     Lensed sample statistics:
+       z_lens:   0.25 - 0.97  (mean 0.61)    [v2 mean was ~0.3]
+       z_source: 0.92 - 2.74  (mean 1.86)    [v2 mean was ~1.1]
+       theta_E:  0.24 - 0.95  (mean 0.48)    [v2 mean was ~0.7]
+     Example source SED at z=2.52:
+       F115W=1.00  F150W=0.88  F277W=0.64  F444W=0.51
+
+  d) File: simulate_v3.py
+     Output directory: output/v3/
+     Same structure as v2: per-band images, sources, labels, parameters
+     Added: metadata.json with version info and all parameter distributions
+     All v2 fixes preserved: RGB pixel solid angle normalization,
+       color-preserving asinh stretch, per-band Poisson noise
+
+  e) Version history:
+     v1: test_generate.ipynb / simulate_v2.ipynb
+         Single band (F115W), jw01810 data, Gaussian PSF, SIS lens model
+     v2: simulate_multiband.py -> output/multiband/
+         4 bands, COSMOS-Web data, empirical PSF, SIE+SHEAR,
+         SLACS parameters, Poisson noise, RGB composites
+     v3: simulate_v3.py -> output/v3/
+         Same pipeline as v2, COWLS-calibrated parameters,
+         Lyman-break aware source SEDs, smaller Einstein radii
+
+  Usage:
+     .venv/bin/python3 simulate_v3.py            # 10 test images
+     .venv/bin/python3 simulate_v3.py --n 2000   # full dataset
+
+
+--------------------------------------------------------------------------------
+STEP 12: DEEP MOSAIC UPGRADE — COSMOS-Web DR0.5 (March 2026)
+--------------------------------------------------------------------------------
+
+  Problem:
+    v2/v3 images looked nothing like the real JWST images in COWLS paper
+    Figure 5 (Nightingale et al. 2025, page 10). Root cause: we were using
+    single-detector i2d files (2058x2058, 258s exposure) — individual short
+    exposures from one detector chip. The COWLS team used the full coadded
+    survey mosaics: 36000x30000 pixels, ~6184s effective exposure (24x deeper).
+
+  Solution:
+    Downloaded the full COSMOS-Web DR0.5 mosaics from the public data release
+    at exchg.calet.org/cosmosweb-public/DR0.5/NIRCam/Jan23/.
+
+  a) Data downloaded (raw_data/1727_mosaic/):
+
+     Band    File Size  Pixel Scale  Image Size        Exposure
+     ------  ---------  -----------  ----------------  --------
+     F115W   ~48 GB     0.030"/pix   36000 x 30000     6184.4s
+     F150W   ~48 GB     0.030"/pix   36000 x 30000     6184.4s
+     F277W   ~32 GB     0.030"/pix   36000 x 30000     6184.4s
+     F444W   ~32 GB     0.030"/pix   36000 x 30000     6184.4s
+
+     Total: ~160 GB decompressed
+
+  Critical difference from previous data:
+    - DR0.5 mosaics resample ALL bands (including LW F277W/F444W) to a
+      COMMON 30mas pixel grid. This eliminates the SW/LW pixel scale
+      distinction (0.031" vs 0.063") that caused the RGB color bias in Step 10.
+    - All bands now have PIXAR_SR = 2.1154e-14 sr/pix (identical)
+    - 24x deeper exposure reveals real faint galaxies in backgrounds
+
+  b) New prep script: prep_mosaic.py
+     Extracts backgrounds and PSFs from the full DR0.5 mosaics.
+
+     Per-band calibration (from FITS headers):
+
+       Band    PIXAR_SR        PHOTMJSR  bg_median     bg_std       Patches  PSF stars
+       ------  --------------  --------  -----------   ----------   -------  ---------
+       F115W   2.1154e-14 sr   3.106     0.001073      0.02985     2000     200
+       F150W   2.1154e-14 sr   2.333     0.000853      0.02361     2000     200
+       F277W   2.1154e-14 sr   0.491     0.000847      0.00852     2000     200
+       F444W   2.1154e-14 sr   0.402     0.000827      0.00980     2000     200
+
+     All patches are 125x125 at 0.03"/pix (uniform across all bands).
+     Output: prepped_mosaic/<band>/backgrounds.npy, psf_median.npy
+
+  c) simulate_v3.py updates:
+     - PREPPED_DIR changed from 'prepped_cosmicwebb' to 'prepped_mosaic'
+     - Removed SW_BANDS/LW_BANDS distinction (all bands now 125x125 @ 0.03")
+     - All bands use pixels=125 and pixel_scale=0.03
+     - mjysr_to_sim is now identical (137.54) for all bands
+     - RGB pixel solid angle normalization is now a no-op (all bands have
+       same PIXAR_SR), but code is left in place for correctness
+     - Poisson noise sim_to_elec values updated for new PHOTMJSR and exposure:
+         F115W: 29.68   F150W: 39.51   F277W: 187.73   F444W: 229.29
+       (much higher than v2's 1-2 e-/sim_unit due to 24x longer exposure)
+
+  d) Results from 10 test images:
+     Background quality is dramatically improved — real galaxy structure and
+     deep-field noise patterns are clearly visible in individual band images.
+     The backgrounds now match the depth and character of the images in
+     COWLS Figure 5.
+
+  Usage:
+     .venv/bin/python3 prep_mosaic.py                # extract from DR0.5 mosaics
+     .venv/bin/python3 simulate_v3.py                # 10 test images
+     .venv/bin/python3 simulate_v3.py --n 2000       # full dataset
+
+
+================================================================================
+END OF SUMMARY
+================================================================================
+
+  claude --resume 4f05ff12-fbbc-4649-b44a-9eb2c92944f6

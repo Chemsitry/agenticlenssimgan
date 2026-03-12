@@ -1,0 +1,21 @@
+# Virtual environment
+.venv/
+
+# Data (too large for git)
+raw_data/
+prepped_mosaic/
+prepped_cosmicwebb/
+prepped/
+output/
+MAST_2026-02-26T2313/
+MAST_2026-02-26T2313.zip
+
+# Python
+__pycache__/
+*.pyc
+
+# Claude Code
+.claude/
+
+# macOS
+.DS_Store
