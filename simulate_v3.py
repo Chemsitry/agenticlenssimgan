@@ -22,6 +22,15 @@ v3 changes from v2 (simulate_multiband.py):
     log_mass:  U(11.5, 13.0)                         -> U(11.0, 13.0)
     SED:       Linear z-scaling                      -> Lyman-break aware for high-z sources
 
+  v3.1: Realistic source morphology (INTERPOL)
+    - Source galaxies use real galaxy stamps from COSMOS-Web DR0.5 mosaics
+      instead of smooth Sersic profiles, producing arcs with complex structure
+      (clumpy star-forming regions, spiral arms, irregular morphology)
+    - Stamps extracted per band (preserves wavelength-dependent morphology)
+    - Random rotation (continuous) + flip for augmentation
+    - Falls back to Sersic if source stamps not available (--sersic flag)
+    - Run prep_sources.py first to extract galaxy stamps
+
   Unchanged from v2:
     - Per-band empirical PSF from COSMOS-Web stars
     - Per-band real background patches from COSMOS-Web
@@ -33,8 +42,9 @@ v3 changes from v2 (simulate_multiband.py):
     - Common 30mas pixel grid (all bands 125x125) from DR0.5 mosaics
 
 Usage:
-    .venv/bin/python3 simulate_v3.py          # 10 test images
-    .venv/bin/python3 simulate_v3.py --n 1000 # full dataset
+    .venv/bin/python3 prep_sources.py --size 224  # extract galaxy stamps
+    .venv/bin/python3 simulate_v3.py --size 224   # uses INTERPOL sources
+    .venv/bin/python3 simulate_v3.py --sersic     # force Sersic sources
 """
 
 import os
@@ -48,15 +58,17 @@ from pathlib import Path
 
 import numpy as np
 
-# Parse --size early (needed for module-level config before main)
+# Parse --size and --sersic early (needed for module-level config before main)
 IMAGE_SIZE = 125
 if '--size' in sys.argv:
     IMAGE_SIZE = int(sys.argv[sys.argv.index('--size') + 1])
+USE_SERSIC = '--sersic' in sys.argv
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import AsinhNorm
 from scipy.stats import truncnorm
+from scipy.ndimage import gaussian_filter
 
 from lenstronomy.LightModel.light_model import LightModel
 from lenstronomy.ImSim.image_model import ImageModel
@@ -146,6 +158,81 @@ def get_background(band):
     return bgs[rng_bg.integers(len(bgs))]
 
 
+# ── Load source galaxy stamps (for INTERPOL source model) ─────────────
+
+source_stamps = None
+SOURCE_STAMP_SCALE = 0.03  # arcsec/pix (default, overridden by source_info.json)
+
+if USE_SERSIC:
+    print("  Using SERSIC_ELLIPSE sources (--sersic flag)")
+else:
+    sources_dir = PREPPED_DIR / 'sources'
+    if sources_dir.exists():
+        try:
+            source_stamps = {}
+            for band in BANDS:
+                arr = np.load(str(sources_dir / f'stamps_{band}.npy'))
+                arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+                source_stamps[band] = arr
+            with open(sources_dir / 'source_info.json') as f:
+                source_info = json.load(f)
+            SOURCE_STAMP_SCALE = source_info.get('pixel_scale', 0.03)
+            # Remove stamps that are all-zero in any band
+            valid = np.ones(len(source_stamps[BANDS[0]]), dtype=bool)
+            for band in BANDS:
+                valid &= source_stamps[band].sum(axis=(1, 2)) > 0
+            for band in BANDS:
+                source_stamps[band] = source_stamps[band][valid]
+            n_stamps = len(source_stamps[BANDS[0]])
+            stamp_sz = source_info['stamp_size']
+            print(f"  Loaded {n_stamps} valid source galaxy stamps ({stamp_sz}x{stamp_sz})")
+            print(f"  Source model: INTERPOL (real galaxy morphology)")
+        except Exception as e:
+            print(f"  WARNING: Could not load source stamps: {e}")
+            print(f"  Falling back to SERSIC_ELLIPSE sources")
+            source_stamps = None
+    else:
+        print(f"  No source stamps at {sources_dir} — using SERSIC_ELLIPSE sources")
+        print(f"  (Run prep_sources.py to extract real galaxy stamps)")
+
+
+# ── Load lens galaxy stamps (for INTERPOL lens light) ─────────────────
+
+lens_stamps = None
+LENS_STAMP_SCALE = 0.03
+
+lenses_dir = PREPPED_DIR / 'lenses'
+if USE_SERSIC:
+    print("  Using SERSIC_ELLIPSE lens light (--sersic flag)")
+elif lenses_dir.exists():
+    try:
+        lens_stamps = {}
+        for band in BANDS:
+            arr = np.load(str(lenses_dir / f'stamps_{band}.npy'))
+            arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+            lens_stamps[band] = arr
+        with open(lenses_dir / 'lens_info.json') as f:
+            lens_info = json.load(f)
+        LENS_STAMP_SCALE = lens_info.get('pixel_scale', 0.03)
+        # Remove stamps that are all-zero in any band
+        valid = np.ones(len(lens_stamps[BANDS[0]]), dtype=bool)
+        for band in BANDS:
+            valid &= lens_stamps[band].sum(axis=(1, 2)) > 0
+        for band in BANDS:
+            lens_stamps[band] = lens_stamps[band][valid]
+        n_lens = len(lens_stamps[BANDS[0]])
+        lens_sz = lens_info['stamp_size']
+        print(f"  Loaded {n_lens} valid lens galaxy stamps ({lens_sz}x{lens_sz})")
+        print(f"  Lens light model: INTERPOL (real elliptical morphology)")
+    except Exception as e:
+        print(f"  WARNING: Could not load lens stamps: {e}")
+        print(f"  Using SERSIC_ELLIPSE lens light")
+        lens_stamps = None
+else:
+    print(f"  No lens stamps at {lenses_dir} — using SERSIC_ELLIPSE lens light")
+    print(f"  (Run prep_lenses.py to extract real elliptical galaxy stamps)")
+
+
 # ── SED color ratios (v3: Lyman-break aware for high-z sources) ──────────
 #
 # v3 changes:
@@ -216,8 +303,17 @@ def add_poisson_noise(image_sim, band, rng=None):
     if rng is None:
         rng = np.random.default_rng()
     s2e = BAND_CONFIG[band]['sim_to_elec']
-    electrons = np.clip(image_sim * s2e, 0, None)
-    noisy = rng.poisson(electrons).astype(np.float64)
+    electrons = np.nan_to_num(image_sim * s2e, nan=0.0, posinf=0.0, neginf=0.0)
+    electrons = np.clip(electrons, 0, None)
+    # For very large lambda, use Gaussian approximation (Poisson→Normal)
+    large = electrons > 1e8
+    if large.any():
+        noisy = np.empty_like(electrons)
+        noisy[~large] = rng.poisson(electrons[~large]).astype(np.float64)
+        noisy[large] = rng.normal(electrons[large], np.sqrt(electrons[large]))
+        noisy = np.clip(noisy, 0, None)
+    else:
+        noisy = rng.poisson(electrons).astype(np.float64)
     return (noisy / s2e).astype(np.float32)
 
 
@@ -245,6 +341,14 @@ def make_psf_obj(band):
                kernel_point_source=kernel,
                kernel_point_source_normalisation=True)
 
+def make_delta_psf():
+    """Delta-function PSF for INTERPOL stamps that are already PSF-convolved."""
+    delta = np.zeros((3, 3))
+    delta[1, 1] = 1.0
+    return PSF(psf_type='PIXEL',
+               kernel_point_source=delta,
+               kernel_point_source_normalisation=True)
+
 def make_kwargs_data(band):
     cfg = BAND_CONFIG[band]
     pixels = cfg['pixels']
@@ -263,7 +367,7 @@ KWARGS_NUMERICS = {
     'supersampling_convolution': True,
 }
 
-ARC_LENS_MIN_RATIO = 1e-2
+ARC_LENS_MIN_RATIO = 0.10
 
 # ── v3 parameter distributions (COWLS-calibrated) ────────────────────────
 #
@@ -347,17 +451,36 @@ def simulate_one_multiband(lensed=True, seed=None):
     mStar = stellar_mass(mass, z_lens)
 
     # ── Galaxy shape parameters (shared across bands) ────────────────
+    # Lens mass model ellipticity
     e1, e2 = rng.normal(0, 0.15, size=2).clip(-0.5, 0.5)
-    R_sersic_lens = float(truncnorm.rvs(0, 3, loc=0.3, scale=0.3,
-                          random_state=int(rng.integers(int(1e9)))))
-    n_sersic_lens = float(rng.uniform(2, 6))
-    R_sersic_src = float(truncnorm.rvs(0, 3, loc=0.15, scale=0.15,
-                         random_state=int(rng.integers(int(1e9)))))
-    n_sersic_src = float(rng.uniform(1, 4))
-    e1s, e2s = rng.normal(0, 0.2, size=2).clip(-0.6, 0.6)
+
+    # Lens light: INTERPOL (real elliptical stamp) or Sersic
+    use_interpol_lens = lens_stamps is not None
+    if use_interpol_lens:
+        n_lens_stamps = len(lens_stamps[BANDS[0]])
+        lens_stamp_idx = int(rng.integers(n_lens_stamps))
+        lens_phi_G = float(rng.uniform(0, 2 * np.pi))
+        lens_flip = bool(rng.random() > 0.5)
+    else:
+        R_sersic_lens = float(truncnorm.rvs(0, 3, loc=0.3, scale=0.3,
+                              random_state=int(rng.integers(int(1e9)))))
+        n_sersic_lens = float(rng.uniform(2, 6))
+
+    # Source galaxy: INTERPOL (real galaxy stamp) or Sersic
+    use_interpol = source_stamps is not None
+    if use_interpol:
+        n_stamps = len(source_stamps[BANDS[0]])
+        src_stamp_idx = int(rng.integers(n_stamps))
+        src_phi_G = float(rng.uniform(0, 2 * np.pi))
+        src_flip = bool(rng.random() > 0.5)
+    else:
+        R_sersic_src = float(truncnorm.rvs(0, 3, loc=0.15, scale=0.15,
+                             random_state=int(rng.integers(int(1e9)))))
+        n_sersic_src = float(rng.uniform(1, 4))
+        e1s, e2s = rng.normal(0, 0.2, size=2).clip(-0.6, 0.6)
 
     if lensed and theta_E > 0:
-        src_offset = float(rng.uniform(0.0, 0.3 * theta_E))
+        src_offset = float(rng.uniform(0.0, 0.8 * theta_E))
         src_angle = float(rng.uniform(0, 2 * np.pi))
         center_x = src_offset * np.cos(src_angle)
         center_y = src_offset * np.sin(src_angle)
@@ -392,10 +515,52 @@ def simulate_one_multiband(lensed=True, seed=None):
 
         kwargs_data = make_kwargs_data(band)
         data_class = ImageData(**kwargs_data)
-        psf_class = make_psf_obj(band)
+        # Use delta PSF when INTERPOL stamps (pre-convolved), real PSF for Sersic
+        if use_interpol and use_interpol_lens:
+            psf_class = make_delta_psf()
+        else:
+            psf_class = make_psf_obj(band)
 
-        source_model = LightModel(['SERSIC_ELLIPSE'])
-        lens_light_model = LightModel(['SERSIC_ELLIPSE'])
+        # Source model: INTERPOL (real galaxy) or SERSIC_ELLIPSE (fallback)
+        if use_interpol:
+            stamp = source_stamps[band][src_stamp_idx].copy()
+            if src_flip:
+                stamp = np.ascontiguousarray(np.fliplr(stamp))
+            source_model = LightModel(['INTERPOL'])
+            kwargs_source = [{
+                'image': stamp.astype(np.float64),
+                'amp': 1,
+                'center_x': float(center_x),
+                'center_y': float(center_y),
+                'phi_G': src_phi_G,
+                'scale': SOURCE_STAMP_SCALE,
+            }]
+        else:
+            source_model = LightModel(['SERSIC_ELLIPSE'])
+            kwargs_source = [{
+                'amp': 1, 'R_sersic': R_sersic_src, 'n_sersic': n_sersic_src,
+                'e1': float(e1s), 'e2': float(e2s),
+                'center_x': float(center_x), 'center_y': float(center_y)}]
+
+        # Lens light: INTERPOL (real elliptical stamp) or SERSIC_ELLIPSE
+        if use_interpol_lens:
+            lens_stamp = lens_stamps[band][lens_stamp_idx].copy()
+            if lens_flip:
+                lens_stamp = np.ascontiguousarray(np.fliplr(lens_stamp))
+            lens_light_model = LightModel(['INTERPOL'])
+            kwargs_lens_light = [{
+                'image': lens_stamp.astype(np.float64),
+                'amp': 1,
+                'center_x': 0., 'center_y': 0.,
+                'phi_G': lens_phi_G,
+                'scale': LENS_STAMP_SCALE,
+            }]
+        else:
+            lens_light_model = LightModel(['SERSIC_ELLIPSE'])
+            kwargs_lens_light = [{
+                'amp': 1, 'R_sersic': R_sersic_lens, 'n_sersic': n_sersic_lens,
+                'e1': float(e1), 'e2': float(e2), 'center_x': 0., 'center_y': 0.}]
+
         lens_model = LensModel(['SIE', 'SHEAR'], z_lens=z_lens, z_source=z_source)
 
         image_model = ImageModel(
@@ -410,13 +575,6 @@ def simulate_one_multiband(lensed=True, seed=None):
              'center_x': 0., 'center_y': 0.},
             {'gamma1': gamma1, 'gamma2': gamma2}
         ]
-        kwargs_lens_light = [{
-            'amp': 1, 'R_sersic': R_sersic_lens, 'n_sersic': n_sersic_lens,
-            'e1': float(e1), 'e2': float(e2), 'center_x': 0., 'center_y': 0.}]
-        kwargs_source = [{
-            'amp': 1, 'R_sersic': R_sersic_src, 'n_sersic': n_sersic_src,
-            'e1': float(e1s), 'e2': float(e2s),
-            'center_x': float(center_x), 'center_y': float(center_y)}]
 
         # Scale fluxes by SED color ratio relative to F115W
         calc_sum_src = calc_sum_src_f115w * src_colors[band]
@@ -443,13 +601,23 @@ def simulate_one_multiband(lensed=True, seed=None):
             return simulate_one_multiband(lensed=lensed, seed=int(rng.integers(int(1e9))))
         kwargs_lens_light[0]['amp'] = calc_sum_lens / s_lens
 
-        # Arc/lens floor
+        # Set arc/lens flux ratio from a realistic distribution
+        # Real systems (SLACS/COWLS): arc/lens ~ 0.05–0.5 in the arc band
         if lensed and calc_sum_lens > 0:
-            arc_flux = calc_sum_src * scale_up
-            lens_flux = calc_sum_lens
-            if arc_flux < ARC_LENS_MIN_RATIO * lens_flux:
-                boost = (ARC_LENS_MIN_RATIO * lens_flux) / arc_flux
-                kwargs_source[0]['amp'] *= boost
+            target_ratio = 10**float(rng.uniform(np.log10(ARC_LENS_MIN_RATIO),
+                                                  np.log10(0.5)))
+            # Current arc flux after source calibration
+            current_arc = np.sum(image_model.image(
+                kwargs_lens, kwargs_source,
+                kwargs_lens_light=kwargs_lens_light,
+                source_add=True, lens_light_add=False))
+            current_lens = np.sum(image_model.image(
+                kwargs_lens, kwargs_source,
+                kwargs_lens_light=kwargs_lens_light,
+                source_add=False, lens_light_add=True))
+            if current_arc > 0 and current_lens > 0:
+                current_ratio = current_arc / current_lens
+                kwargs_source[0]['amp'] *= (target_ratio / current_ratio)
 
         # Final renders
         image = image_model.image(kwargs_lens, kwargs_source,
@@ -501,6 +669,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--n', type=int, default=10, help='Number of images (half lensed, half not)')
     parser.add_argument('--size', type=int, default=125, help='Image size in pixels (default: 125)')
+    parser.add_argument('--sersic', action='store_true', help='Use Sersic sources instead of INTERPOL galaxy stamps')
     args = parser.parse_args()
 
     N = args.n
@@ -650,31 +819,45 @@ def main():
         ax.set_title(title, fontsize=7)
         ax.axis('off')
 
-    def make_rgb(r, g, b, stretch=0.2, Q=10, sat_boost=1.5, percentile_bg=1.0):
-        """Lupton et al. (2004) RGB composite — standard astronomical method.
+    def make_rgb(r, g, b, stretch=0.10, Q=12, sat_boost=1.8,
+                 percentile_bg=5.0, smooth_sigma=1.5, lum_floor=0.06):
+        """Lupton et al. (2004) RGB composite with COWLS-style cleanup.
 
         stretch: linear region size (lower = more contrast in faint features)
         Q: asinh softening (higher = more dynamic range compression)
         sat_boost: color saturation multiplier (>1 = more vivid)
         percentile_bg: percentile to subtract as background (black level)
+        smooth_sigma: Gaussian smooth for noise reduction (display only)
+        lum_floor: luminance threshold below which pixels fade to black
         """
         from astropy.visualization import make_lupton_rgb
         r = np.nan_to_num(r, nan=0.0).astype(np.float64)
         g = np.nan_to_num(g, nan=0.0).astype(np.float64)
         b = np.nan_to_num(b, nan=0.0).astype(np.float64)
+        # Gaussian smooth for noise reduction (matches COWLS ~2x display downsample)
+        if smooth_sigma > 0:
+            r = gaussian_filter(r, smooth_sigma)
+            g = gaussian_filter(g, smooth_sigma)
+            b = gaussian_filter(b, smooth_sigma)
         # Subtract background so sky is black
         for ch in [r, g, b]:
             ch -= np.percentile(ch, percentile_bg)
             ch[ch < 0] = 0
         rgb = make_lupton_rgb(r, g, b, stretch=stretch, Q=Q, minimum=0)
+        rgb_f = rgb.astype(np.float32) / 255.0
         # Boost color saturation
         if sat_boost != 1.0:
-            rgb_f = rgb.astype(np.float32) / 255.0
             lum = 0.2989 * rgb_f[:,:,0] + 0.5870 * rgb_f[:,:,1] + 0.1140 * rgb_f[:,:,2]
             for ch in range(3):
                 rgb_f[:,:,ch] = lum + sat_boost * (rgb_f[:,:,ch] - lum)
-            rgb = (np.clip(rgb_f, 0, 1) * 255).astype(np.uint8)
-        return rgb
+            rgb_f = np.clip(rgb_f, 0, 1)
+        # Luminance floor: push noise-dominated pixels to black
+        if lum_floor > 0:
+            lum = np.max(rgb_f, axis=2)
+            gate = np.clip((lum - lum_floor) / lum_floor, 0, 1)
+            for ch in range(3):
+                rgb_f[:,:,ch] *= gate
+        return (np.clip(rgb_f, 0, 1) * 255).astype(np.uint8)
 
     def show_rgb(ax, rgb_img, title):
         ax.imshow(rgb_img, origin='lower')
@@ -708,7 +891,7 @@ def main():
         idx = order_l[col]
         clean_imgs = {band: preview_clean[band][col] for band in BANDS}
         r, g, b = _rgb_channels(clean_imgs, _norm)
-        rgb = make_rgb(r, g, b, stretch=0.1, Q=10, sat_boost=1.5, percentile_bg=0)
+        rgb = make_rgb(r, g, b, percentile_bg=0, smooth_sigma=0.5)
         show_rgb(axs[4, col], rgb,
                  f'Clean sim θE={theta_Es[idx]:.2f}" zl={z_lenses[idx]:.2f}')
     axs[4, 0].set_ylabel('RGB clean\n(no background)', fontsize=10)
@@ -718,7 +901,7 @@ def main():
         idx = order_l[col]
         imgs = {band: all_images[band][idx] for band in BANDS}
         r, g, b = _rgb_channels(imgs, _norm)
-        rgb = make_rgb(r, g, b, stretch=0.15, Q=12, sat_boost=1.5)
+        rgb = make_rgb(r, g, b)
         show_rgb(axs[5, col], rgb,
                  f'RGB lensed θE={theta_Es[idx]:.2f}" zl={z_lenses[idx]:.2f}')
     axs[5, 0].set_ylabel('RGB lensed\n(+ background)', fontsize=10)
@@ -728,7 +911,7 @@ def main():
         idx = order_l[col]
         srcs = {band: all_sources[band][idx] for band in BANDS}
         r, g, b = _rgb_channels(srcs, _norm)
-        rgb = make_rgb(r, g, b, stretch=0.05, Q=8, sat_boost=2.0, percentile_bg=0)
+        rgb = make_rgb(r, g, b, percentile_bg=0, smooth_sigma=0.5, sat_boost=2.0)
         show_rgb(axs[6, col], rgb,
                  f'RGB arcs θE={theta_Es[idx]:.2f}" zs={z_sources[idx]:.2f}')
     axs[6, 0].set_ylabel('RGB arcs\n(source only)', fontsize=10)
@@ -739,7 +922,7 @@ def main():
         lens_imgs = {band: np.clip(all_images[band][idx] - all_sources[band][idx], 0, None)
                      for band in BANDS}
         r, g, b = _rgb_channels(lens_imgs, _norm)
-        rgb = make_rgb(r, g, b, stretch=0.15, Q=12, sat_boost=1.5)
+        rgb = make_rgb(r, g, b)
         show_rgb(axs[7, col], rgb,
                  f'RGB lens-only zl={z_lenses[idx]:.2f}')
     axs[7, 0].set_ylabel('RGB lens\n(no arcs)', fontsize=10)
@@ -755,7 +938,8 @@ def main():
         lens_r, lens_g, lens_b = _rgb_channels(lens_imgs, _norm)
         lens_peak = max(np.max(np.abs(lens_r)), np.max(np.abs(lens_g)), np.max(np.abs(lens_b)), 1e-10)
         boost = lens_peak / arc_peak
-        rgb = make_rgb(arc_r * boost, arc_g * boost, arc_b * boost, stretch=0.05, Q=8, sat_boost=2.0, percentile_bg=0)
+        rgb = make_rgb(arc_r * boost, arc_g * boost, arc_b * boost,
+                      percentile_bg=0, smooth_sigma=0.5, sat_boost=2.0)
         show_rgb(axs[8, col], rgb,
                  f'RGB arcs boosted {boost:.0f}x')
     axs[8, 0].set_ylabel('RGB arcs\n(boosted)', fontsize=10)

@@ -618,8 +618,236 @@ STEP 12: DEEP MOSAIC UPGRADE — COSMOS-Web DR0.5 (March 2026)
      .venv/bin/python3 simulate_v3.py --n 2000       # full dataset
 
 
+--------------------------------------------------------------------------------
+STEP 13: REALISTIC SOURCE MORPHOLOGY — INTERPOL GALAXY STAMPS (March 2026)
+--------------------------------------------------------------------------------
+
+  Problem:
+    Simulated arcs used smooth Sersic ellipse profiles for the source galaxy.
+    This produces clean, symmetric arcs that look visibly synthetic compared to
+    real COWLS images (e.g., COWLS II Figure 1, Mahler et al. 2025, MNRAS 544,
+    L8-L14), where arcs show complex structure: clumpy star-forming regions,
+    spiral arms, irregular morphology, knots.
+
+  Solution:
+    Extract real galaxy stamps from the COSMOS-Web DR0.5 mosaics and use them
+    as pixelated source light profiles via lenstronomy's INTERPOL model.
+
+  a) Source extraction (prep_sources.py):
+     - Detection: extended sources in F277W at 15-sigma above background
+     - Extended source selection via concentration index:
+       C = core_flux(r<5px) / total_flux(r<32px)
+       Stars: C > 0.5 (compact PSF)
+       Galaxies: C < 0.45 (spread-out light)
+     - Found 17,634 extended source candidates in 36000x30000 mosaic
+     - Selected 500 brightest isolated galaxies (STAMP_SIZE spacing)
+     - Multi-band matched extraction: same pixel position in all 4 bands
+     - Background-subtracted and normalized to sum=1 per band per stamp
+     - Output: prepped_mosaic{_size}/sources/stamps_{band}.npy (500, 65, 65)
+       ~34 MB total (8.4 MB per band)
+
+  b) INTERPOL source model (simulate_v3.py):
+     - lenstronomy's INTERPOL light profile: places a pixelated image in the
+       source plane. The image is interpolated via RectBivariateSpline and
+       ray-traced through the lens to produce the lensed image.
+     - Parameters: image (2D array), amp, center_x, center_y, phi_G, scale
+     - phi_G = continuous random rotation (0 to 2*pi)
+     - Random horizontal flip for additional augmentation
+     - Combined: effectively infinite unique source orientations from 500 stamps
+     - Falls back to SERSIC_ELLIPSE if stamps not available (--sersic flag)
+     - Amplitude calibration identical to Sersic: render with amp=1, measure
+       total flux, rescale to desired flux. SED color ratios still applied
+       per band for overall band-to-band color.
+
+  c) Per-band morphology:
+     Each band's stamp is extracted independently and normalized to sum=1.
+     This preserves wavelength-dependent morphology: F115W shows UV-bright
+     star-forming knots, F444W shows smoother stellar mass distribution.
+     The SED color ratios (starforming_color_ratios) control the overall
+     band-to-band flux ratio, while the intra-galaxy morphology comes from
+     the real data.
+
+  d) Known limitation — double PSF convolution:
+     Extracted stamps include the JWST PSF. When used as source profiles,
+     lenstronomy reconvolves the lensed image with the PSF. This effectively
+     applies the PSF twice, mildly broadening arcs (~sqrt(2) in PSF sigma).
+     For resolved galaxies (>5 pixels across), this is a modest effect.
+     Future improvement: PSF deconvolution of stamps before normalization.
+
+  e) Results:
+     Arc morphology is dramatically improved — arcs now show complex structure
+     (asymmetries, clumps, extended features) instead of smooth symmetric rings.
+     Performance is comparable to Sersic (~0.09s/image at 224x224, ~0.03s at 125).
+
+  Usage:
+     .venv/bin/python3 prep_sources.py --size 224          # extract stamps
+     .venv/bin/python3 simulate_v3.py --size 224           # INTERPOL sources
+     .venv/bin/python3 simulate_v3.py --size 224 --sersic  # force Sersic
+
+
+================================================================================
+PLANNED UPGRADES — TOWARD COWLS II IMAGE QUALITY
+================================================================================
+
+  Reference: Mahler et al. 2025, MNRAS 544, L8-L14 (COWLS II)
+  "COSMOS-Web Lens Survey II: 17 spectacular strong gravitational lenses"
+
+  The COWLS II paper (Figure 1) shows the target image quality for our
+  simulations. Key remaining gaps between our simulations and those images:
+
+
+  UPGRADE 1: RGB RENDERING METHOD
+  ────────────────────────────────
+  Status: NOT YET IMPLEMENTED
+
+  Current: R=F444W, G=F277W, B=avg(F115W,F150W) with Lupton RGB stretch
+  COWLS II: "images produced combining the four filters" — credits Kaija
+  Virolainen for rendering. Two inspection combos used:
+    - F115W/F150W/F444W
+    - F115W/F277W/F444W
+
+  The COWLS images show vivid colors: orange/yellow lenses, blue/green arcs,
+  rich background galaxy colors. Our current rendering produces acceptable
+  but less vivid results.
+
+  Possible improvements:
+    a) Try the two COWLS inspection combos as alternative RGB mappings
+    b) Tune Lupton stretch/Q parameters for better dynamic range
+    c) Try per-channel percentile scaling (SDSS-style)
+    d) Add noise-aware background subtraction before RGB (cleaner sky = blacker)
+    e) Investigate Lupton+ vs. alternative methods (log, asinh per-channel)
+
+  Impact: Medium (visual quality only, doesn't affect training data)
+
+
+  UPGRADE 2: IMAGE SCALE / FIELD OF VIEW
+  ───────────────────────────────────────
+  Status: NOT YET IMPLEMENTED
+
+  Current: 224x224 px at 30mas = 6.72" x 6.72" FoV
+  COWLS II: 18.9" x 18.9" panels = 630x630 px at 30mas
+
+  The COWLS images show much more context around the lens, including the
+  full extent of large Einstein radius systems and surrounding galaxies.
+  Our 224x224 cutouts may clip the outer structure of larger systems.
+
+  Implementation:
+    a) Run prep_mosaic.py with --size 630 (or similar)
+    b) Run prep_sources.py for new size
+    c) Run simulate_v3.py with --size 630
+    d) Requires ~6.3x more background data per patch
+
+  Impact: High for visual quality, moderate for classifier training
+  Note: May require larger source stamps (currently 65x65 = 1.95")
+
+
+  UPGRADE 3: PSF DECONVOLUTION OF SOURCE STAMPS
+  ──────────────────────────────────────────────
+  Status: NOT YET IMPLEMENTED
+
+  Currently source galaxy stamps include the JWST PSF convolution from the
+  mosaic imaging. When used as INTERPOL sources, lenstronomy convolves the
+  lensed image with the PSF again, causing mild double-convolution.
+
+  Fix: Apply Richardson-Lucy or Wiener deconvolution to the extracted stamps
+  using our empirical PSF before normalizing. This removes the original PSF
+  so that lenstronomy's single convolution gives the correct final result.
+
+  Implementation:
+    - scipy.signal.fftconvolve-based Richardson-Lucy (15-20 iterations)
+    - Use per-band psf_median.npy as deconvolution kernel
+    - Apply before normalization in prep_sources.py
+    - Validate by comparing PSF width in final images
+
+  Impact: Low-Medium (effect is modest for resolved galaxies)
+
+
+  UPGRADE 4: MULTI-COMPONENT LENS MASS MODELS
+  ────────────────────────────────────────────
+  Status: NOT YET IMPLEMENTED
+
+  Current: SIE + external shear (single component)
+  Real lenses often have:
+    - Multiple mass components (main lens + satellite/perturber)
+    - Substructure (dark matter subhalos causing flux ratio anomalies)
+    - Line-of-sight structure (secondary deflectors)
+
+  COWLS II Table 1 shows some systems require complex mass models for
+  accurate reproduction. Adding multi-component models would produce
+  more diverse arc morphologies (asymmetric, broken arcs).
+
+  Impact: Medium (more diverse training examples)
+
+
+  UPGRADE 5: REALISTIC LENS LIGHT PROFILES
+  ────────────────────────────────────────
+  Status: IMPLEMENTED (Step 14)
+
+  See Step 14 below.
+
+
+================================================================================
+STEP 14 — REALISTIC LENS LIGHT (INTERPOL ELLIPTICAL GALAXY STAMPS)
+================================================================================
+Date: March 12, 2026
+
+PROBLEM
+-------
+Lens galaxies rendered with single Sersic ellipse profiles look obviously
+artificial — perfectly smooth, symmetric light distributions that lack the
+natural substructure of real elliptical galaxies.
+
+SOLUTION
+--------
+1. Created prep_lenses.py to extract real elliptical galaxy stamps from
+   the DR0.5 mosaics, similar to prep_sources.py but selecting compact/
+   elliptical morphology:
+   - Detects in F444W (25-sigma, ellipticals brightest in NIR)
+   - Concentration filter: 0.45 < C < 0.75 (resolved ellipticals, not stars)
+   - Mid-radius flux check to reject point sources
+   - Cosine edge taper (10px width) to avoid hard stamp boundary
+   - Larger stamps: 101x101 = 3.03" (vs 65x65 for sources)
+   - Each stamp normalized to sum=1 per band
+
+2. Modified simulate_v3.py to use INTERPOL model for lens light:
+   - Loads lens stamps at startup (like source stamps)
+   - Per-band rendering: LightModel(['INTERPOL']) with lens stamp
+   - Random rotation (phi_G) and horizontal flip for diversity
+   - Amplitude calibration: render with amp=1, measure total, rescale
+   - --sersic flag forces both source and lens to Sersic (for comparison)
+
+3. Fixed Poisson noise overflow:
+   - INTERPOL lens light can produce very large pixel values in sim units
+   - Added NaN/inf sanitization before Poisson sampling
+   - Gaussian approximation for electron counts > 1e8 (Poisson→Normal)
+
+FILES
+-----
+  prep_lenses.py                 — extract elliptical galaxy stamps
+  simulate_v3.py                 — updated with INTERPOL lens light
+  prepped_mosaic_224/lenses/     — 300 lens stamps (101x101) per band
+    stamps_F115W.npy (12.2 MB)
+    stamps_F150W.npy (12.2 MB)
+    stamps_F277W.npy (12.2 MB)
+    stamps_F444W.npy (12.2 MB)
+    lens_info.json
+
+USAGE
+-----
+  .venv/bin/python3 prep_lenses.py --size 224          # extract lens stamps
+  .venv/bin/python3 simulate_v3.py --size 224 --n 10   # INTERPOL lens+source
+  .venv/bin/python3 simulate_v3.py --size 224 --sersic # Sersic fallback
+
+RESULT
+------
+  Lens galaxies now have realistic morphology:
+  - Natural color gradients (redder cores)
+  - Isophote structure and slight asymmetries
+  - Occasional nearby companions within stamp
+  - Boxy/disky deviations from pure elliptical
+  Comparison: output/v3_224/full_comparison.png (Sersic vs INTERPOL)
+
+
 ================================================================================
 END OF SUMMARY
 ================================================================================
-
-  claude --resume 4f05ff12-fbbc-4649-b44a-9eb2c92944f6
