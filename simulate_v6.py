@@ -294,11 +294,15 @@ KWARGS_NUMERICS_INTERPOL = {
 }
 
 
-def augment_stamp(stamp, rng):
-    """Random rotation (continuous) + optional flip."""
-    angle = float(rng.uniform(0, 360))
+def augment_stamp(stamp, angle, do_flip):
+    """Apply rotation + optional flip with explicit, shared parameters.
+
+    Angle and flip are decided once per system (outside the per-band loop)
+    so all 4 bands of the same galaxy get the SAME transform — preserving
+    physical cross-band morphology consistency.
+    """
     out = rotate(stamp, angle, reshape=False, order=1, mode='constant', cval=0.0)
-    if rng.random() > 0.5:
+    if do_flip:
         out = np.ascontiguousarray(np.fliplr(out))
     out = np.clip(out, 0, None)
     total = out.sum()
@@ -356,19 +360,24 @@ def simulate_one(lensed=True, seed=None):
     use_interpol_src = source_stamps is not None
     use_interpol_lens = lens_stamps is not None
 
-    # Source stamp selection + augmentation (shared across bands)
+    # Source stamp selection + augmentation params (SHARED across bands)
+    # Pre-decide angle/flip here so all 4 bands get the same transform
     if use_interpol_src:
         n_stamps = len(source_stamps[BANDS[0]])
         src_stamp_idx = int(rng.integers(n_stamps))
+        src_angle = float(rng.uniform(0, 360))
+        src_flip = bool(rng.random() > 0.5)
     else:
         R_sersic_src = 0.15
         n_sersic_src = 1.5
         e1s, e2s = rng.normal(0, 0.2, size=2).clip(-0.6, 0.6)
 
-    # Lens stamp selection + augmentation (shared across bands)
+    # Lens stamp selection + augmentation params (SHARED across bands)
     if use_interpol_lens:
         n_lens_st = len(lens_stamps[BANDS[0]])
         lens_stamp_idx = int(rng.integers(n_lens_st))
+        lens_angle = float(rng.uniform(0, 360))
+        lens_flip = bool(rng.random() > 0.5)
     else:
         R_sersic_lens = 0.4
         n_sersic_lens = 4
@@ -414,7 +423,8 @@ def simulate_one(lensed=True, seed=None):
 
         # Source model
         if use_interpol_src:
-            stamp = augment_stamp(source_stamps[band][src_stamp_idx].copy(), rng)
+            stamp = augment_stamp(source_stamps[band][src_stamp_idx].copy(),
+                                  src_angle, src_flip)
             source_model = LightModel(['INTERPOL'])
             kwargs_source = [{
                 'image': stamp.astype(np.float64),
@@ -434,7 +444,8 @@ def simulate_one(lensed=True, seed=None):
 
         # Lens light model
         if use_interpol_lens:
-            lens_stamp = augment_stamp(lens_stamps[band][lens_stamp_idx].copy(), rng)
+            lens_stamp = augment_stamp(lens_stamps[band][lens_stamp_idx].copy(),
+                                       lens_angle, lens_flip)
             lens_light_model = LightModel(['INTERPOL'])
             kwargs_lens_light = [{
                 'image': lens_stamp.astype(np.float64),
