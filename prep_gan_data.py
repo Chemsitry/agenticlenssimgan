@@ -1,11 +1,12 @@
 """
 prep_gan_data.py — Prepare training data for SimGAN refinement.
 
-Simulated: Center-crop 128x128 from simulated images (where the lens lives).
-Real: Find brightest galaxy in each background patch, crop 128x128 around it.
+Simulated: Center-crop 128x128 from galaxy-only images (no background).
+Real: Find brightest galaxy in each background patch, crop 128x128, subtract
+      local background estimate to isolate galaxy morphology.
 
-This ensures both domains have galaxy-containing patches of similar brightness,
-so the discriminator learns texture/morphology — not "has galaxy = fake."
+Both domains contain isolated galaxy light only, so the discriminator must
+learn morphology/texture differences — not background or brightness cues.
 
 Usage:
     .venv/bin/python3 prep_gan_data.py
@@ -15,7 +16,7 @@ import argparse
 import os
 import json
 import numpy as np
-from scipy.ndimage import maximum_filter, gaussian_filter
+from scipy.ndimage import gaussian_filter
 from pathlib import Path
 
 BANDS = ['F115W', 'F150W', 'F277W', 'F444W']
@@ -30,26 +31,18 @@ def center_crop(arr, crop_size):
 
 
 def find_galaxy_crops(bg_band, crop_size, margin=10):
-    """Find the brightest galaxy in each background patch, return crop coords.
-
-    Uses F277W (deepest band) to detect galaxies, then crops all bands
-    at the same location.
-    """
+    """Find the brightest galaxy in each background patch, return crop coords."""
     n, h, w = bg_band.shape
     half = crop_size // 2
     coords = []
 
     for i in range(n):
         patch = bg_band[i]
-        # Smooth to find galaxy peaks (not noise spikes)
         smoothed = gaussian_filter(patch, sigma=3.0)
-        # Mask edges so crop fits
         smoothed[:half + margin, :] = 0
         smoothed[-(half + margin):, :] = 0
         smoothed[:, :half + margin] = 0
         smoothed[:, -(half + margin):] = 0
-
-        # Find peak
         y, x = np.unravel_index(np.argmax(smoothed), smoothed.shape)
         coords.append((y, x))
 
@@ -66,16 +59,31 @@ def crop_at_coords(arr, coords, crop_size):
     return out
 
 
-def normalize(data, percentile_low=1, percentile_high=99):
-    """Per-image, per-band sqrt stretch + percentile normalization to [-1, 1].
+def subtract_background(crops):
+    """Subtract local background from each crop using edge pixels.
 
-    Each image is normalized independently so the discriminator can't use
-    brightness as a cue — it must learn texture/morphology differences.
+    Estimates background as the median of a 10px border around the crop,
+    then subtracts it. This isolates the galaxy light from the sky.
     """
-    data = np.sqrt(np.clip(data, 0, None))
+    n, h, w = crops.shape
+    out = np.zeros_like(crops)
+    for i in range(n):
+        patch = crops[i]
+        # Use 10px border as background estimate
+        border = np.concatenate([
+            patch[:10, :].ravel(),
+            patch[-10:, :].ravel(),
+            patch[:, :10].ravel(),
+            patch[:, -10:].ravel(),
+        ])
+        bg_level = np.median(border)
+        out[i] = patch - bg_level
+    return out
 
+
+def normalize(data, percentile_low=1, percentile_high=99):
+    """Per-image, per-band percentile normalization to [-1, 1]."""
     n_images, n_bands = data.shape[:2]
-    # Compute global stats for denormalization later
     stats = {}
     for b in range(n_bands):
         stats[b] = {
@@ -83,14 +91,13 @@ def normalize(data, percentile_low=1, percentile_high=99):
             'p_hi': float(np.percentile(data[:, b], percentile_high)),
         }
 
-    # Per-image, per-band normalization
     for i in range(n_images):
         for b in range(n_bands):
             patch = data[i, b]
             p_lo = np.percentile(patch, percentile_low)
             p_hi = np.percentile(patch, percentile_high)
             if p_hi - p_lo < 1e-8:
-                data[i, b] = 0  # flat patch
+                data[i, b] = 0
             else:
                 data[i, b] = np.clip((patch - p_lo) / (p_hi - p_lo), 0, 1) * 2 - 1
 
@@ -107,24 +114,27 @@ def main():
 
     os.makedirs(args.out_dir, exist_ok=True)
 
-    # ── Simulated: center crops (where the lens is) ───────────────────────
-    print(f'Loading simulated images from {args.sim_dir}...')
+    # ── Simulated: center crops of galaxy-only (no background) ───────────
+    print(f'Loading galaxy-only images from {args.sim_dir}...')
     sim_arrays = []
     for band in BANDS:
-        data = np.load(os.path.join(args.sim_dir, f'images_{band}.npy'), mmap_mode='r')
+        path = os.path.join(args.sim_dir, f'galaxies_{band}.npy')
+        data = np.load(path, mmap_mode='r')
         print(f'  {band}: {data.shape}')
         sim_arrays.append(center_crop(data, args.crop))
     sim_data = np.stack(sim_arrays, axis=1).astype(np.float32)
     print(f'  Sim stacked: {sim_data.shape}')
 
-    # ── Real: find brightest galaxy in each background, crop around it ────
+    # Apply sqrt stretch to compress dynamic range
+    sim_data = np.sqrt(np.clip(sim_data, 0, None))
+
+    # ── Real: find brightest galaxy, crop, subtract background ───────────
     print(f'\nLoading real backgrounds from {args.bg_dir}...')
-    # Use F277W (deepest band) to find galaxies
     bg_f277w = np.load(os.path.join(args.bg_dir, 'F277W', 'backgrounds.npy'), mmap_mode='r')
     print(f'  Finding brightest galaxy in each of {bg_f277w.shape[0]} patches...')
     coords = find_galaxy_crops(bg_f277w, args.crop)
 
-    # Check quality: how bright are the found galaxies?
+    # Check quality
     peaks = []
     for i, (y, x) in enumerate(coords):
         half = args.crop // 2
@@ -134,21 +144,26 @@ def main():
     print(f'  Galaxy peaks: median={np.median(peaks):.3f}, '
           f'min={np.min(peaks):.3f}, max={np.max(peaks):.3f}')
 
-    # Filter out patches where no real galaxy was found (very low peak)
-    threshold = np.percentile(peaks, 10)  # keep top 90%
+    # Filter out empty patches
+    threshold = np.percentile(peaks, 10)
     good_idx = np.where(peaks > threshold)[0]
     coords_good = [coords[i] for i in good_idx]
-    print(f'  Keeping {len(good_idx)} patches with galaxies (dropped {len(coords) - len(good_idx)} empty ones)')
+    print(f'  Keeping {len(good_idx)} patches with galaxies')
 
-    # Crop all bands at galaxy locations
+    # Crop all bands at galaxy locations, then subtract background
     real_arrays = []
     for band in BANDS:
         bg = np.load(os.path.join(args.bg_dir, band, 'backgrounds.npy'), mmap_mode='r')
         bg_good = bg[good_idx]
         cropped = crop_at_coords(bg_good, coords_good, args.crop)
+        # Subtract local background to isolate galaxy light
+        cropped = subtract_background(cropped)
         real_arrays.append(cropped)
-        print(f'  {band}: cropped {cropped.shape}')
+        print(f'  {band}: cropped + bg-subtracted {cropped.shape}')
     real_data = np.stack(real_arrays, axis=1).astype(np.float32)
+
+    # Apply sqrt stretch (clip negatives from bg subtraction)
+    real_data = np.sqrt(np.clip(real_data, 0, None))
     print(f'  Real stacked: {real_data.shape}')
 
     # ── Normalize together ────────────────────────────────────────────────
@@ -183,7 +198,7 @@ def main():
         'bands': BANDS,
         'sim_dir': args.sim_dir,
         'bg_dir': args.bg_dir,
-        'note': 'Sim=center crops (lens region), Real=crops around brightest galaxy in each background patch',
+        'note': 'Sim=galaxy-only center crops (no background), Real=bg-subtracted galaxy crops',
     }
     with open(os.path.join(args.out_dir, 'data_info.json'), 'w') as f:
         json.dump(info, f, indent=2)

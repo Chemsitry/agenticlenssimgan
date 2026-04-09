@@ -1,22 +1,27 @@
 """
-simulate_v4.py — Validated multi-band JWST gravitational lens simulation
+simulate_v6.py — v4 pipeline + real galaxy morphology via INTERPOL stamps
 
-Based on validate_f115w.py (validated against real COWLS II data):
-  - 630x630 px at 0.03"/pix (18.9" FoV, matches COWLS II Figure 1)
-  - 4 NIRCam bands: F115W, F150W, F277W, F444W
-  - Sersic profiles for lens + source (clean, no artifacts)
-  - Per-band empirical PSF from DR0.5 mosaics
-  - Per-band real backgrounds (spatially matched across bands)
-  - Poisson noise calibrated per band
-  - COWLS-calibrated parameter distributions (Nightingale+2025)
-  - Percentile+gamma RGB rendering tuned to COWLS II style
+Base: simulate_v4.py (validated COWLS-calibrated multi-band pipeline)
+
+v6 changes:
+  - Lens light: INTERPOL real elliptical stamps (kills Sersic "forcefield" halo)
+  - Source light: INTERPOL real galaxy stamps (realistic arc morphology)
+  - Stamps denoised + apodized (fixes garbled artifacts from v3 INTERPOL)
+  - Delta PSF for pre-convolved stamps, supersampling_factor=5 for sources
+  - Random rotation + flip for stamp augmentation
+  - Falls back to Sersic with --sersic flag
+
+Requires: prep_stamps_v6.py to populate prepped_mosaic_630/sources/ and /lenses/
 
 Usage:
-    .venv/bin/python3 simulate_v4.py              # 10 test images
-    .venv/bin/python3 simulate_v4.py --n 2000     # full dataset
+    .venv/bin/python3 prep_stamps_v6.py           # extract stamps first
+    .venv/bin/python3 simulate_v6.py              # 10 test images
+    .venv/bin/python3 simulate_v6.py --n 2000     # full dataset
+    .venv/bin/python3 simulate_v6.py --sersic     # fallback to v4-style Sersic
 """
 
 import os
+import sys
 os.environ['NUMBA_DISABLE_JIT'] = '1'
 
 import json
@@ -26,7 +31,7 @@ from pathlib import Path
 
 import numpy as np
 from scipy.stats import truncnorm
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, rotate
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -40,14 +45,17 @@ from lenstronomy.Data.psf import PSF
 from lenstronomy.Cosmo.lens_cosmo import LensCosmo
 import multiprocessing as mp
 
+# Parse --sersic early (before module-level stamp loading)
+USE_SERSIC = '--sersic' in sys.argv
+
 # ── Configuration ────────────────────────────────────────────────────────
 
-VERSION = 'v4'
+VERSION = 'v6'
 BANDS = ['F115W', 'F150W', 'F277W', 'F444W']
 IMAGE_SIZE = 630
 PIXEL_SCALE = 0.03  # arcsec/pix (630 * 0.03 = 18.9" FoV)
 PREPPED_DIR = Path('prepped_mosaic_630')
-OUT_DIR = Path('output/v4')
+OUT_DIR = Path('output/v6')
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 sum_to_flux = 6.501853565914121
@@ -102,6 +110,73 @@ for band in BANDS:
     backgrounds[band] = (bg_raw * mjysr_to_sim).astype(np.float32)
 
     print(f"  {band}: sim_to_elec={sim_to_elec:.2f}  backgrounds={backgrounds[band].shape}")
+
+
+# ── Load galaxy stamps (for INTERPOL light models) ───────────────────────
+
+source_stamps = None
+lens_stamps = None
+SOURCE_STAMP_SCALE = 0.03
+LENS_STAMP_SCALE = 0.03
+
+if USE_SERSIC:
+    print("\n  Using SERSIC_ELLIPSE for all light (--sersic flag)")
+else:
+    # Source stamps
+    src_dir = PREPPED_DIR / 'sources'
+    if src_dir.exists():
+        try:
+            source_stamps = {}
+            for band in BANDS:
+                arr = np.load(str(src_dir / f'stamps_{band}.npy'))
+                arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+                source_stamps[band] = arr
+            with open(src_dir / 'source_info.json') as f:
+                src_info = json.load(f)
+            SOURCE_STAMP_SCALE = src_info.get('pixel_scale', 0.03)
+            # Remove stamps that are all-zero in any band
+            valid = np.ones(len(source_stamps[BANDS[0]]), dtype=bool)
+            for band in BANDS:
+                valid &= source_stamps[band].sum(axis=(1, 2)) > 0
+            for band in BANDS:
+                source_stamps[band] = source_stamps[band][valid]
+            n_src = len(source_stamps[BANDS[0]])
+            print(f"\n  Loaded {n_src} source stamps ({src_info['stamp_size']}x{src_info['stamp_size']})")
+        except Exception as e:
+            print(f"\n  WARNING: Could not load source stamps: {e}")
+            source_stamps = None
+    else:
+        print(f"\n  No source stamps — using SERSIC_ELLIPSE sources")
+        print(f"  (Run prep_stamps_v6.py first)")
+
+    # Lens stamps
+    lens_dir = PREPPED_DIR / 'lenses'
+    if lens_dir.exists():
+        try:
+            lens_stamps = {}
+            for band in BANDS:
+                arr = np.load(str(lens_dir / f'stamps_{band}.npy'))
+                arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+                lens_stamps[band] = arr
+            with open(lens_dir / 'lens_info.json') as f:
+                lens_info = json.load(f)
+            LENS_STAMP_SCALE = lens_info.get('pixel_scale', 0.03)
+            valid = np.ones(len(lens_stamps[BANDS[0]]), dtype=bool)
+            for band in BANDS:
+                valid &= lens_stamps[band].sum(axis=(1, 2)) > 0
+            for band in BANDS:
+                lens_stamps[band] = lens_stamps[band][valid]
+            n_lens = len(lens_stamps[BANDS[0]])
+            print(f"  Loaded {n_lens} lens stamps ({lens_info['stamp_size']}x{lens_info['stamp_size']})")
+        except Exception as e:
+            print(f"  WARNING: Could not load lens stamps: {e}")
+            lens_stamps = None
+    else:
+        print(f"  No lens stamps — using SERSIC_ELLIPSE lens light")
+
+    mode_src = "INTERPOL" if source_stamps is not None else "SERSIC_ELLIPSE"
+    mode_lens = "INTERPOL" if lens_stamps is not None else "SERSIC_ELLIPSE"
+    print(f"  Source model: {mode_src}  |  Lens light: {mode_lens}")
 
 
 # ── Helper functions ─────────────────────────────────────────────────────
@@ -188,6 +263,15 @@ def make_psf_obj(band):
                kernel_point_source_normalisation=True)
 
 
+def make_delta_psf():
+    """Delta-function PSF for INTERPOL stamps that are already PSF-convolved."""
+    delta = np.zeros((3, 3))
+    delta[1, 1] = 1.0
+    return PSF(psf_type='PIXEL',
+               kernel_point_source=delta,
+               kernel_point_source_normalisation=True)
+
+
 def make_kwargs_data():
     return {
         'background_rms': 0,
@@ -199,10 +283,28 @@ def make_kwargs_data():
     }
 
 
-KWARGS_NUMERICS = {
+KWARGS_NUMERICS_SERSIC = {
     'supersampling_factor': 3,
     'supersampling_convolution': True,
 }
+
+KWARGS_NUMERICS_INTERPOL = {
+    'supersampling_factor': 5,
+    'supersampling_convolution': True,
+}
+
+
+def augment_stamp(stamp, rng):
+    """Random rotation (continuous) + optional flip."""
+    angle = float(rng.uniform(0, 360))
+    out = rotate(stamp, angle, reshape=False, order=1, mode='constant', cval=0.0)
+    if rng.random() > 0.5:
+        out = np.ascontiguousarray(np.fliplr(out))
+    out = np.clip(out, 0, None)
+    total = out.sum()
+    if total > 0:
+        out /= total
+    return out
 
 
 # ── Simulate one system ──────────────────────────────────────────────────
@@ -247,17 +349,31 @@ def simulate_one(lensed=True, seed=None):
     mass = 10**log_mass
     mStar = stellar_mass(mass, z_lens)
 
-    # Lens shape — fixed Sersic params (validated)
+    # Lens mass ellipticity
     e1, e2 = 0.05, 0.02
-    R_sersic_lens = 0.4
-    n_sersic_lens = 4
 
-    # Source shape — fixed Sersic params (validated)
-    R_sersic_src = 0.15
-    n_sersic_src = 1.5
-    e1s, e2s = rng.normal(0, 0.2, size=2).clip(-0.6, 0.6)
+    # Decide light model modes
+    use_interpol_src = source_stamps is not None
+    use_interpol_lens = lens_stamps is not None
 
-    # Source position — always at 0.3 * theta_E (validated, produces visible arcs)
+    # Source stamp selection + augmentation (shared across bands)
+    if use_interpol_src:
+        n_stamps = len(source_stamps[BANDS[0]])
+        src_stamp_idx = int(rng.integers(n_stamps))
+    else:
+        R_sersic_src = 0.15
+        n_sersic_src = 1.5
+        e1s, e2s = rng.normal(0, 0.2, size=2).clip(-0.6, 0.6)
+
+    # Lens stamp selection + augmentation (shared across bands)
+    if use_interpol_lens:
+        n_lens_st = len(lens_stamps[BANDS[0]])
+        lens_stamp_idx = int(rng.integers(n_lens_st))
+    else:
+        R_sersic_lens = 0.4
+        n_sersic_lens = 4
+
+    # Source position — same as v4 (validated)
     if lensed and theta_E > 0:
         src_offset = 0.3 * theta_E
         src_angle = float(rng.uniform(0, 2 * np.pi))
@@ -276,42 +392,74 @@ def simulate_one(lensed=True, seed=None):
         {'gamma1': gamma1, 'gamma2': gamma2}
     ]
 
-    # Light model templates
-    kwargs_lens_light = [{
-        'amp': 1, 'R_sersic': R_sersic_lens, 'n_sersic': n_sersic_lens,
-        'e1': float(e1), 'e2': float(e2), 'center_x': 0., 'center_y': 0.
-    }]
-    kwargs_source = [{
-        'amp': 1, 'R_sersic': R_sersic_src, 'n_sersic': n_sersic_src,
-        'e1': float(e1s), 'e2': float(e2s),
-        'center_x': float(center_x), 'center_y': float(center_y)
-    }]
-
     # SED color ratios
     uv_slope = float(np.clip(rng.normal(-0.5, 1.0), -2.5, 1.5))
     lens_colors = elliptical_color_ratios(z_lens)
     src_colors = starforming_color_ratios(z_source, uv_slope=uv_slope)
 
-    # Render all bands — calibration matches validate_f115w.py approach
+    # Render all bands
     band_results = {}
     target_ratio = 0.25  # fixed arc/lens ratio (validated)
 
     for band in BANDS:
         data_class = ImageData(**make_kwargs_data())
-        psf_class = make_psf_obj(band)
+
+        # PSF: delta for INTERPOL (pre-convolved), real PSF for Sersic
+        if use_interpol_src and use_interpol_lens:
+            psf_class = make_delta_psf()
+            kwargs_num = KWARGS_NUMERICS_INTERPOL
+        else:
+            psf_class = make_psf_obj(band)
+            kwargs_num = KWARGS_NUMERICS_SERSIC
+
+        # Source model
+        if use_interpol_src:
+            stamp = augment_stamp(source_stamps[band][src_stamp_idx].copy(), rng)
+            source_model = LightModel(['INTERPOL'])
+            kwargs_source = [{
+                'image': stamp.astype(np.float64),
+                'amp': 1,
+                'center_x': float(center_x),
+                'center_y': float(center_y),
+                'phi_G': 0.0,  # rotation already applied in augment_stamp
+                'scale': SOURCE_STAMP_SCALE,
+            }]
+        else:
+            source_model = LightModel(['SERSIC_ELLIPSE'])
+            kwargs_source = [{
+                'amp': 1, 'R_sersic': R_sersic_src, 'n_sersic': n_sersic_src,
+                'e1': float(e1s), 'e2': float(e2s),
+                'center_x': float(center_x), 'center_y': float(center_y)
+            }]
+
+        # Lens light model
+        if use_interpol_lens:
+            lens_stamp = augment_stamp(lens_stamps[band][lens_stamp_idx].copy(), rng)
+            lens_light_model = LightModel(['INTERPOL'])
+            kwargs_lens_light = [{
+                'image': lens_stamp.astype(np.float64),
+                'amp': 1,
+                'center_x': 0., 'center_y': 0.,
+                'phi_G': 0.0,
+                'scale': LENS_STAMP_SCALE,
+            }]
+        else:
+            lens_light_model = LightModel(['SERSIC_ELLIPSE'])
+            kwargs_lens_light = [{
+                'amp': 1, 'R_sersic': R_sersic_lens, 'n_sersic': n_sersic_lens,
+                'e1': float(e1), 'e2': float(e2), 'center_x': 0., 'center_y': 0.
+            }]
+
         lens_model = LensModel(['SIE', 'SHEAR'], z_lens=z_lens, z_source=z_source)
-        source_model = LightModel(['SERSIC_ELLIPSE'])
-        lens_light_model = LightModel(['SERSIC_ELLIPSE'])
 
         im = ImageModel(
             data_class=data_class, psf_class=psf_class,
             lens_model_class=lens_model,
             source_model_class=source_model,
             lens_light_model_class=lens_light_model,
-            kwargs_numerics=KWARGS_NUMERICS)
+            kwargs_numerics=kwargs_num)
 
-        # Calibrate lens amp: render at amp=1, measure peak, scale to match
-        # real COWLS data range (~1000-4000 sim units peak, validated)
+        # Calibrate lens amp
         kw_ll_cal = [{**kwargs_lens_light[0], 'amp': 1.0}]
         kw_src_cal = [{**kwargs_source[0], 'amp': 1.0}]
 
@@ -324,8 +472,6 @@ def simulate_one(lensed=True, seed=None):
         if peak_unit <= 0 or sum_lens_unit <= 0:
             return simulate_one(lensed=lensed, seed=int(rng.integers(int(1e9))))
 
-        # Target peak brightness scaled by SED color ratio
-        # Base peak ~2000 sim units in F115W (validated against Lens E)
         target_peak = 2000.0 * lens_colors[band]
         amp_lens = target_peak / peak_unit
 
@@ -461,7 +607,8 @@ def make_preview(all_images, all_sources, labels, theta_Es, z_lenses, z_sources,
         axs[row, 0].set_ylabel(band, fontsize=10)
     axs[4, 0].set_ylabel('RGB', fontsize=10)
 
-    plt.suptitle(f'simulate_v4 — {N} images (630px, 18.9" FoV)', fontsize=12)
+    mode = 'INTERPOL' if source_stamps is not None else 'Sersic'
+    plt.suptitle(f'simulate_v6 [{mode}] — {N} images (630px, 18.9" FoV)', fontsize=12)
     plt.tight_layout()
 
     # Auto-increment preview filename
@@ -476,14 +623,15 @@ def make_preview(all_images, all_sources, labels, theta_Es, z_lenses, z_sources,
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description='v4 multi-band lens simulation (630px, validated)')
+    parser = argparse.ArgumentParser(description='v6 multi-band lens simulation (INTERPOL stamps)')
     parser.add_argument('--n', type=int, default=10, help='Number of images (half lensed, half not)')
+    parser.add_argument('--sersic', action='store_true', help='Force Sersic light profiles (v4 mode)')
     args = parser.parse_args()
 
     N = args.n
     N_EACH = N // 2
 
-    print(f"\nsimulate_v4 — validated multi-band pipeline")
+    print(f"\nsimulate_v6 — INTERPOL real galaxy morphology pipeline")
     print(f"  {IMAGE_SIZE}x{IMAGE_SIZE} px @ {PIXEL_SCALE}\"/pix = {IMAGE_SIZE*PIXEL_SCALE:.1f}\" FoV")
     print(f"\nGenerating {N} images ({N_EACH} lensed + {N_EACH} non-lensed)...")
 

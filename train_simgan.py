@@ -29,6 +29,16 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
+def make_blur_kernel(sigma=5.0, kernel_size=21):
+    """Create a Gaussian blur kernel for structural self-regularization."""
+    import torch
+    x = torch.arange(kernel_size, dtype=torch.float32) - kernel_size // 2
+    g = torch.exp(-x ** 2 / (2 * sigma ** 2))
+    kernel_1d = g / g.sum()
+    kernel_2d = kernel_1d[:, None] * kernel_1d[None, :]
+    return kernel_2d
+
+
 # ── Model definitions ─────────────────────────────────────────────────────────
 
 def build_models(n_channels, device):
@@ -215,15 +225,40 @@ def train(args):
     opt_d = torch.optim.Adam(disc.parameters(), lr=args.lr, betas=(0.5, 0.999))
     history = HistoryBuffer(max_size=50)
 
+    # ── Blur kernel for structural self-regularization ───────────────────
+    blur_k = make_blur_kernel(sigma=5.0, kernel_size=21)
+    # Shape: (n_channels, 1, 21, 21) for depthwise conv
+    blur_weight = blur_k.unsqueeze(0).unsqueeze(0).repeat(n_channels, 1, 1, 1).to(device)
+    blur_pad = 21 // 2
+
+    def blur(x):
+        return torch.nn.functional.conv2d(x, blur_weight, padding=blur_pad, groups=n_channels)
+
+    # ── Resume from checkpoint ───────────────────────────────────────────
+    start_epoch = 1
+    if args.resume:
+        ckpt = torch.load(args.resume, map_location=device, weights_only=False)
+        refiner.load_state_dict(ckpt['refiner'])
+        disc.load_state_dict(ckpt['disc'])
+        opt_r.load_state_dict(ckpt['opt_r'])
+        opt_d.load_state_dict(ckpt['opt_d'])
+        start_epoch = ckpt['epoch'] + 1
+        if 'lambda_self' in ckpt:
+            args.lambda_self = ckpt['lambda_self']
+        print(f'Resumed from {args.resume} (epoch {ckpt["epoch"]})')
+
     # ── Output ────────────────────────────────────────────────────────────
     ckpt_dir = os.path.join(args.out_dir, 'checkpoints')
     preview_dir = os.path.join(args.out_dir, 'previews')
     os.makedirs(ckpt_dir, exist_ok=True)
     os.makedirs(preview_dir, exist_ok=True)
 
-    # Fixed samples for consistent previews
-    n_preview = min(5, len(sim_tensor), len(real_tensor))
-    sim_fixed = sim_tensor[:n_preview].to(device)
+    # Fixed samples for consistent previews (mix of non-lensed and lensed)
+    n_preview = min(6, len(sim_tensor), len(real_tensor))
+    n_half = n_preview // 2
+    n_sim = len(sim_tensor)
+    preview_idx = list(range(n_half)) + list(range(n_sim // 2, n_sim // 2 + n_half))
+    sim_fixed = sim_tensor[preview_idx].to(device)
     real_fixed = real_tensor[:n_preview].numpy()
 
     # ── Training loop ─────────────────────────────────────────────────────
@@ -231,11 +266,11 @@ def train(args):
     lambda_self = args.lambda_self
     t0 = time.time()
 
-    print(f'\nTraining SimGAN: {args.epochs} epochs, batch={args.batch}, '
+    print(f'\nTraining SimGAN: epochs {start_epoch}-{args.epochs}, batch={args.batch}, '
           f'λ_self={lambda_self}')
     print(f'Output: {args.out_dir}\n')
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, args.epochs + 1):
         refiner.train()
         disc.train()
 
@@ -287,7 +322,7 @@ def train(args):
             pred_refined = disc(refined)
 
             loss_adv = torch.mean((pred_refined - 1) ** 2)
-            loss_self = torch.mean(torch.abs(refined - sim_batch))
+            loss_self = torch.mean(torch.abs(blur(refined) - blur(sim_batch)))
             loss_r = loss_adv + lambda_self * loss_self
 
             loss_r.backward()
@@ -384,5 +419,6 @@ if __name__ == '__main__':
                         help='Minimum lambda_self after decay')
     parser.add_argument('--preview_every', type=int, default=10)
     parser.add_argument('--ckpt_every', type=int, default=25)
+    parser.add_argument('--resume', default=None, help='Path to checkpoint .pt file to resume from')
     args = parser.parse_args()
     train(args)
