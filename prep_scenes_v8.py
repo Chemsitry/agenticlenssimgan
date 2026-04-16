@@ -25,6 +25,10 @@ OUT_DIR = PREPPED_DIR / 'scenes_v8'
 
 SCENE_SIZE = 630  # matches simulate_v8 IMAGE_SIZE
 PEAK_MIN = 1000   # F444W peak (sim units) to keep — ensures visible lens
+COMPACTNESS_MAX = 0.35  # rejects stars — stars have diffraction spikes
+                        # and concentrate most flux within r<3 px of center;
+                        # galaxies spread flux out over larger radii.
+                        # (measured as sum(r<3) / sum(r<15) in F444W)
 
 sum_to_flux = 6.501853565914121
 
@@ -80,9 +84,28 @@ def main():
     f444 = raw['F444W']
     center_peaks = f444[:, c - 20:c + 20, c - 20:c + 20].max(axis=(1, 2))
     bright = center_peaks > PEAK_MIN
-    keep = valid & bright
+
+    # Compactness filter — rejects stars (with diffraction spikes).
+    # Stars have most flux concentrated within the PSF core (r<3 px); galaxies
+    # spread flux over larger radii. Compactness = sum(r<3) / sum(r<15).
+    yy, xx = np.mgrid[:SCENE_SIZE, :SCENE_SIZE]
+    rr = np.sqrt((yy - c) ** 2 + (xx - c) ** 2)
+    mask_small = rr < 3
+    mask_medium = rr < 15
+    compactness = np.zeros(n_total, dtype=np.float32)
+    for i in range(n_total):
+        if not valid[i]:
+            continue
+        s = f444[i]
+        f_small = s[mask_small].sum()
+        f_medium = s[mask_medium].sum()
+        compactness[i] = f_small / f_medium if f_medium > 0 else 1.0
+    not_star = compactness < COMPACTNESS_MAX
+
+    keep = valid & bright & not_star
     n_keep = int(keep.sum())
-    print(f'\n  {n_keep}/{n_total} scenes pass: valid & central F444W peak > {PEAK_MIN}')
+    print(f'\n  bright: {int(bright.sum())}/{n_total}   not_star: {int(not_star.sum())}/{n_total}')
+    print(f'  final: {n_keep}/{n_total} scenes pass all filters')
 
     for b in BANDS:
         arr = raw[b][keep]
@@ -97,6 +120,7 @@ def main():
         'pixel_scale': 0.03,
         'fov_arcsec': SCENE_SIZE * 0.03,
         'brightness_filter': f'central F444W peak > {PEAK_MIN} sim units',
+        'compactness_filter': f'F444W sum(r<3)/sum(r<15) < {COMPACTNESS_MAX} (rejects stars with diffraction spikes)',
         'derived_from': 'DR0.5 mosaic cutouts centered on lenses_v7 positions',
         'notes': 'One-image-per-sample approach: scene IS the real JWST cutout '
                  'with a real galaxy near center. Simulation just adds a '
