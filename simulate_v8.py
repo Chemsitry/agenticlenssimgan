@@ -382,14 +382,26 @@ def simulate_one(lensed=True, seed=None):
         {'gamma1': gamma1, 'gamma2': gamma2}
     ]
 
-    # SED color ratios
+    # SED color ratios (source only — lens light is real data in the scene,
+    # already has its own SED baked in)
     uv_slope = float(np.clip(rng.normal(-0.5, 1.0), -2.5, 1.5))
-    lens_colors = elliptical_color_ratios(z_lens)
     src_colors = starforming_color_ratios(z_source, uv_slope=uv_slope)
+    # Normalize so F444W = 1.0 (reference band for total-flux anchoring below).
+    _ref = src_colors['F444W'] if src_colors['F444W'] > 0 else 1.0
+    src_colors = {b: src_colors[b] / _ref for b in BANDS}
+
+    # Anchor the lensed arc flux to the scene's real F444W central brightness,
+    # THEN apply per-band color ratios so the arc has the right SED
+    # (star-forming galaxy at z_source, with Lyman break + Balmer break).
+    scene_F444W = scenes['F444W'][scene_idx]
+    sH_ref = scene_F444W.shape[0] // 2
+    ref_lens_peak = float(
+        scene_F444W[sH_ref - 20:sH_ref + 20, sH_ref - 20:sH_ref + 20].max())
+    ref_flux_proxy = ref_lens_peak * 50.0  # ~ effective-area × peak
 
     # Render all bands
     band_results = {}
-    target_ratio = 0.25  # fixed arc/lens ratio (validated)
+    target_ratio = 0.25  # arc total flux ÷ lens F444W total flux (at F444W)
 
     for band in BANDS:
         data_class = ImageData(**make_kwargs_data())
@@ -449,12 +461,12 @@ def simulate_one(lensed=True, seed=None):
                                 seed=int(rng.integers(int(1e9))))
 
         scene = scenes[band][scene_idx]
-        sH = scene.shape[0] // 2
-        lens_peak = float(
-            scene[sH - 20:sH + 20, sH - 20:sH + 20].max())
-        # Approximate lens total flux ~ peak * effective_area (gauss-ish)
-        lens_flux_proxy = lens_peak * 50.0
-        amp_src = (lens_flux_proxy * target_ratio / sum_src_unit) if lensed else 0.0
+        # Source amp: anchored to F444W lens peak, scaled by per-band src color.
+        # This imposes a physical SED on the arc regardless of source type
+        # (VELA stamps lost intrinsic colors during per-band normalization;
+        # Sersic never had colors).
+        amp_src = (ref_flux_proxy * target_ratio * src_colors[band]
+                    / sum_src_unit) if lensed else 0.0
 
         kw_src = [{**kwargs_source[0], 'amp': amp_src}]
         image_src_part = im_src.image(kwargs_lens, kw_src,
