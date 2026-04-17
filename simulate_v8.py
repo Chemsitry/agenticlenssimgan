@@ -303,7 +303,7 @@ def augment_stamp_absolute(stamp, angle, do_flip):
 
 # ── Simulate one system ──────────────────────────────────────────────────
 
-def simulate_one(lensed=True, seed=None):
+def simulate_one(lensed=True, seed=None, scene_idx=None):
     """Simulate one lens system in all 4 bands. Returns dict."""
     rng = np.random.default_rng(seed)
 
@@ -361,7 +361,8 @@ def simulate_one(lensed=True, seed=None):
         e1s, e2s = rng.normal(0, 0.2, size=2).clip(-0.6, 0.6)
 
     # Scene (real JWST cutout containing a real elliptical near center)
-    scene_idx = int(rng.integers(n_scenes))
+    if scene_idx is None:
+        scene_idx = int(rng.integers(n_scenes))
 
     # Source position — same as v4 (validated)
     if lensed and theta_E > 0:
@@ -486,8 +487,8 @@ def simulate_one(lensed=True, seed=None):
 # ── Parallel worker ──────────────────────────────────────────────────────
 
 def _simulate_worker(args):
-    idx, lensed, seed, noise_seed = args
-    result = simulate_one(lensed=lensed, seed=seed)
+    idx, lensed, seed, noise_seed, scene_idx = args
+    result = simulate_one(lensed=lensed, seed=seed, scene_idx=scene_idx)
     band_results, theta_E, z_lens, z_source, mass = result
 
     rng_noise = np.random.default_rng(noise_seed)
@@ -631,17 +632,26 @@ def main():
     z_sources = np.zeros(N)
     masses = np.zeros(N)
 
-    # Pre-generate seeds
+    # Pre-generate seeds and scene assignments.
+    # Non-lensed images must have unique scenes (otherwise they'd be
+    # pixel-identical — same real JWST cutout with nothing added).
+    # Lensed images may reuse scenes (lensed arcs differ per system).
     rng_main = np.random.default_rng(99)
+    scene_indices_nonlensed = rng_main.choice(
+        n_scenes, size=N_EACH, replace=False)
+    scene_indices_lensed = rng_main.integers(
+        n_scenes, size=N_EACH)
     jobs = []
     for i in range(N_EACH):
         seed = int(rng_main.integers(int(1e9)))
         noise_seed = int(rng_main.integers(int(1e9)))
-        jobs.append((i, False, seed, noise_seed))
+        jobs.append((i, False, seed, noise_seed,
+                     int(scene_indices_nonlensed[i])))
     for i in range(N_EACH):
         seed = int(rng_main.integers(int(1e9)))
         noise_seed = int(rng_main.integers(int(1e9)))
-        jobs.append((i + N_EACH, True, seed, noise_seed))
+        jobs.append((i + N_EACH, True, seed, noise_seed,
+                     int(scene_indices_lensed[i])))
 
     # Parallel generation
     n_workers = mp.cpu_count()
