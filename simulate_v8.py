@@ -495,7 +495,7 @@ def _simulate_worker(args):
 
     out = {'idx': idx, 'label': 1.0 if lensed else 0.0,
            'theta_E': theta_E, 'z_lens': z_lens, 'z_source': z_source, 'mass': mass,
-           'images': {}, 'sources': {}, 'galaxies': {}}
+           'images': {}, 'arcs': {}, 'galaxies': {}}
 
     for band in BANDS:
         src_part = band_results[band]['image_src_only']
@@ -504,7 +504,7 @@ def _simulate_worker(args):
         # scene already contains its real JWST observation noise.
         src_noisy = add_poisson_noise(src_part, band, rng=rng_noise)
         out['images'][band] = (scene + src_noisy).astype(np.float32)
-        out['sources'][band] = src_part
+        out['arcs'][band] = src_part
         out['galaxies'][band] = scene.astype(np.float32)
 
     return out
@@ -546,7 +546,7 @@ def build_rgb(img_dict):
 
 # ── Preview ──────────────────────────────────────────────────────────────
 
-def make_preview(all_images, all_sources, labels, theta_Es, z_lenses, z_sources, N):
+def make_preview(all_images, all_arcs, labels, theta_Es, z_lenses, z_sources, N):
     lensed_idx = np.where(labels == 1)[0]
     n_show = min(5, len(lensed_idx))
     if n_show == 0:
@@ -619,11 +619,11 @@ def main():
 
     # Storage
     all_images = {}
-    all_sources = {}
+    all_arcs = {}
     all_galaxies = {}
     for band in BANDS:
         all_images[band] = np.zeros((N, IMAGE_SIZE, IMAGE_SIZE), dtype=np.float32)
-        all_sources[band] = np.zeros((N, IMAGE_SIZE, IMAGE_SIZE), dtype=np.float32)
+        all_arcs[band] = np.zeros((N, IMAGE_SIZE, IMAGE_SIZE), dtype=np.float32)
         all_galaxies[band] = np.zeros((N, IMAGE_SIZE, IMAGE_SIZE), dtype=np.float32)
 
     labels = np.zeros(N)
@@ -667,7 +667,7 @@ def main():
             idx = result['idx']
             for band in BANDS:
                 all_images[band][idx] = result['images'][band]
-                all_sources[band][idx] = result['sources'][band]
+                all_arcs[band][idx] = result['arcs'][band]
                 all_galaxies[band][idx] = result['galaxies'][band]
             labels[idx] = result['label']
             theta_Es[idx] = result['theta_E']
@@ -697,7 +697,7 @@ def main():
     print(f'\nSaving to {OUT_DIR}/')
     for band in BANDS:
         np.save(str(OUT_DIR / f'images_{band}.npy'), all_images[band])
-        np.save(str(OUT_DIR / f'sources_{band}.npy'), all_sources[band])
+        np.save(str(OUT_DIR / f'arcs_{band}.npy'), all_arcs[band])
         np.save(str(OUT_DIR / f'galaxies_{band}.npy'), all_galaxies[band])
         sz = all_images[band].nbytes / 1e6
         print(f'  images_{band}.npy  {sz:.1f} MB')
@@ -727,7 +727,7 @@ def main():
         json.dump(meta, f, indent=2)
 
     # Preview
-    make_preview(all_images, all_sources, labels, theta_Es, z_lenses, z_sources, N)
+    make_preview(all_images, all_arcs, labels, theta_Es, z_lenses, z_sources, N)
 
 
 if __name__ == '__main__':
