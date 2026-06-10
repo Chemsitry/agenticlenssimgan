@@ -6,67 +6,66 @@
 <title>Could a computer tell our sims from real JWST images?</title>
 <style>
 :root{
-  --cy:#5ff;          /* accent only */
-  --fg:#f2f2f2;       /* main text */
-  --mut:#a8a8a8;      /* secondary text */
+  --cy:#5ff;
+  --fg:#f2f2f2;
+  --mut:#a8a8a8;
   --line:#333;
   --panel:#0d0d0d;
   --warn:#ffb84d;
   --bad:#ff5f7a;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{background:#000;color:var(--fg);font-family:"Segoe UI",-apple-system,Helvetica,Arial,sans-serif;font-size:1.15rem;line-height:1.5;}
-.slide{min-height:100vh;padding:3rem 5vw 2.5rem;display:flex;flex-direction:column;border-bottom:1px solid #1a1a1a;}
-.slide-tag{color:var(--mut);font-size:.85rem;letter-spacing:.2em;text-transform:uppercase;margin-bottom:1rem;}
-h1{font-size:2.4rem;font-weight:700;line-height:1.2;margin-bottom:1rem;}
-h2{font-size:1.9rem;margin-bottom:1rem;}
+html{scroll-snap-type:y mandatory;}
+body{background:#000;color:var(--fg);font-family:"Segoe UI",-apple-system,Helvetica,Arial,sans-serif;font-size:1.3rem;line-height:1.45;}
+.slide{height:100vh;overflow:auto;scroll-snap-align:start;padding:2.5rem 4vw 1.5rem;display:flex;flex-direction:column;border-bottom:1px solid #1a1a1a;}
+.slide-tag{color:var(--mut);font-size:.85rem;letter-spacing:.2em;text-transform:uppercase;}
+h1{font-size:2.7rem;font-weight:700;line-height:1.18;margin:.5rem 0 1rem;}
+h2{font-size:2.2rem;margin:.3rem 0 .6rem;}
 h1 em,h2 em{color:var(--cy);font-style:normal;}
-h3{font-size:1.2rem;margin-bottom:.5rem;}
-.sub{color:var(--mut);max-width:65ch;margin-bottom:1.5rem;}
-code{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--cy);font-size:.95em;}
-.row{display:flex;gap:1.5rem;align-items:flex-start;flex-wrap:wrap;}
-.col{flex:1;min-width:320px;}
-.box{border:1px solid var(--line);background:var(--panel);padding:1.1rem 1.2rem;}
+h3{font-size:1.35rem;margin-bottom:.4rem;}
+.sub{color:var(--mut);margin-bottom:1rem;}
+.row{display:flex;gap:1.5rem;align-items:stretch;flex:1;min-height:0;}
+.col{flex:1;min-width:0;}
+.box{border:1px solid var(--line);background:var(--panel);padding:1rem 1.2rem;}
 .accent{border-left:4px solid var(--cy);}
 .box p{color:var(--mut);}
 .box p b{color:var(--fg);}
-.kicker{color:var(--cy);letter-spacing:.25em;text-transform:uppercase;font-size:.85rem;margin-bottom:1rem;}
-table{border-collapse:collapse;width:100%;font-size:1.05rem;}
-th,td{border:1px solid var(--line);padding:.6rem .8rem;text-align:left;vertical-align:top;}
+.kicker{color:var(--cy);letter-spacing:.25em;text-transform:uppercase;font-size:.9rem;margin-bottom:.8rem;}
+table{border-collapse:collapse;width:100%;font-size:1.2rem;}
+th,td{border:1px solid var(--line);padding:.6rem .9rem;text-align:left;vertical-align:top;}
 th{background:#121212;}
 td{color:var(--mut);}
 td b{color:var(--fg);}
 .warn{color:var(--warn);font-weight:700;}
 .bad{color:var(--bad);}
-.tell{border:1px solid var(--line);background:var(--panel);padding:1rem 1.1rem;margin-bottom:1rem;}
-.tell h3 b{color:var(--cy);margin-right:.5rem;}
-.tell p{color:var(--mut);font-size:1.05rem;}
-.tell p b{color:var(--fg);}
-.sev{display:flex;align-items:center;gap:.8rem;font-size:.85rem;color:var(--mut);margin-top:.6rem;}
-.sevbar{height:8px;background:#1c1c1c;flex:1;max-width:260px;}
+.tell{border:1px solid var(--line);background:var(--panel);padding:.7rem 1rem;display:flex;align-items:center;gap:1rem;margin-bottom:.7rem;}
+.tell b.no{color:var(--cy);font-size:1.5rem;min-width:1.6rem;}
+.tell .t{flex:1;font-size:1.3rem;}
+.tell .t small{display:block;color:var(--mut);font-size:1.05rem;}
+.sevbar{height:10px;background:#1c1c1c;width:9rem;flex:0 0 auto;}
 .sevbar i{display:block;height:100%;background:var(--cy);}
-.figure{border:1px solid var(--line);background:var(--panel);padding:.7rem;}
-.figure img{display:block;width:100%;height:auto;}
-.figure figcaption{color:var(--mut);font-size:.95rem;margin-top:.7rem;line-height:1.45;}
+.figure{border:1px solid var(--line);background:var(--panel);padding:.6rem;display:flex;flex-direction:column;min-height:0;}
+.figure img{display:block;max-width:100%;height:auto;object-fit:contain;margin:0 auto;min-height:0;}
+.figure figcaption{color:var(--mut);font-size:1.05rem;margin-top:.6rem;}
 .figure figcaption b{color:var(--fg);}
-.bars{display:flex;flex-direction:column;gap:.7rem;margin:1rem 0;}
-.bar{display:grid;grid-template-columns:minmax(11rem,14rem) 1fr 5rem;align-items:center;gap:1rem;font-size:1.05rem;}
-.bar .track{height:16px;background:#121212;border:1px solid var(--line);}
+.bars{display:flex;flex-direction:column;gap:.6rem;margin:.8rem 0;}
+.bar{display:grid;grid-template-columns:12rem 1fr 5rem;align-items:center;gap:1rem;font-size:1.2rem;}
+.bar .track{height:18px;background:#121212;border:1px solid var(--line);}
 .bar .track i{display:block;height:100%;background:var(--cy);}
 .bar .n{font-weight:700;text-align:right;}
 .bar .lbl{color:var(--mut);}
 .steps{counter-reset:st;list-style:none;}
-.steps li{counter-increment:st;display:flex;gap:1rem;margin-bottom:.9rem;align-items:baseline;}
-.steps li::before{content:counter(st);color:var(--cy);border:1px solid var(--cy);min-width:2rem;height:2rem;display:flex;align-items:center;justify-content:center;font-weight:700;align-self:flex-start;}
-.steps li div{flex:1;}
-.steps li b{color:var(--fg);}
-.steps li span{color:var(--mut);}
-.steps .eff{color:var(--cy);font-size:.9rem;white-space:nowrap;}
-.foot{margin-top:auto;padding-top:1.5rem;display:flex;justify-content:space-between;color:#555;font-size:.85rem;gap:1rem;flex-wrap:wrap;}
+.steps li{counter-increment:st;display:flex;gap:1rem;margin-bottom:.8rem;align-items:center;}
+.steps li::before{content:counter(st);color:var(--cy);border:1px solid var(--cy);min-width:2.2rem;height:2.2rem;display:flex;align-items:center;justify-content:center;font-weight:700;}
+.steps li b{flex:1;font-size:1.3rem;}
+.steps .eff{color:var(--cy);font-size:1.05rem;white-space:nowrap;}
+.foot{margin-top:auto;padding-top:1rem;display:flex;justify-content:space-between;color:#555;font-size:.85rem;gap:1rem;}
+ul.plain{list-style:none;color:var(--mut);font-size:1.25rem;}
+ul.plain li{margin-bottom:.6rem;}
+ul.plain b{color:var(--fg);}
 #dots{position:fixed;right:1rem;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;z-index:5;}
 #dots a{width:9px;height:9px;border:1px solid #444;display:block;}
 #dots a.on{background:var(--cy);border-color:var(--cy);}
-@media (max-width:1100px){#dots{display:none;}}
 </style>
 </head>
 <body>
@@ -76,127 +75,91 @@ td b{color:var(--fg);}
 
 <!-- ============================ SLIDE 1 ============================ -->
 <section class="slide" id="s1">
-  <div class="slide-tag">1 / 4</div>
-  <div class="kicker">group meeting · june 10, 2026</div>
+  <div class="slide-tag">1 / 4 · group meeting · june 10, 2026</div>
   <h1>Could a computer tell our simulated lenses<br>from <em>real</em> JWST images?</h1>
-  <p class="sub" style="font-size:1.3rem;">If yes — then <i>the reasons why</i> are a to-do list for improving the simulator.</p>
+  <p class="sub" style="font-size:1.45rem;">If yes — the reasons why are a <b style="color:var(--fg)">to-do list for the simulator</b>.</p>
 
   <div class="row">
-    <figure class="figure" style="flex:1.6;min-width:340px;">
-      <img src="assets/01_buildup.png" alt="End-to-end buildup of one simulated lens">
-      <figcaption><b>One simulated lens, built up step by step</b> (from our earlier pipeline trace). The arcs are the simulated part: a galaxy image is ray-traced through a mass model, blurred by the telescope's optics, and given photon noise. In the current simulator (v8/v9) everything <i>else</i> in the image is a real JWST cutout.</figcaption>
+    <figure class="figure" style="flex:1.7;">
+      <img src="assets/01_buildup.png" alt="End-to-end buildup of one simulated lens" style="max-height:52vh;">
+      <figcaption>Only the <b>arcs</b> are simulated — everything else is a real JWST image.</figcaption>
     </figure>
-    <div class="col">
-      <div class="box accent" style="margin-bottom:1rem;">
-        <h3>The tool</h3>
-        <p>A <b>discriminator</b>: a small neural network shown two piles of images — simulated and real — and trained to guess which pile each image came from. If it guesses better than a coin flip, there is a real difference, and we can ask the network <b>where it looked</b>.</p>
+    <div class="col" style="display:flex;flex-direction:column;gap:1rem;justify-content:center;">
+      <div class="box accent">
+        <h3>The tool: a discriminator</h3>
+        <p>A small network guessing <b>"sim or real?"</b><br>Better than a coin flip = a real difference.<br>Then we ask it <b>where it looked</b>.</p>
       </div>
       <div class="box">
         <h3>Today</h3>
-        <p>
-          1 · Six differences we predict it would find (just from reading the code)<br>
-          2 · How we set up a fair test<br>
-          3 · What can go wrong + what we'd ask of Nate
-        </p>
+        <p>1 · Six differences it would find<br>2 · A fair test<br>3 · Risks &amp; asks</p>
       </div>
     </div>
   </div>
-  <div class="foot"><span>agenticlenssimgan · 2026-06-10</span><span>scroll or press &darr; to advance</span></div>
+  <div class="foot"><span>agenticlenssimgan</span><span>press &darr; to advance</span></div>
 </section>
 
 <!-- ============================ SLIDE 2 ============================ -->
 <section class="slide" id="s2">
   <div class="slide-tag">2 / 4</div>
   <h2>Six differences it would <em>probably find</em></h2>
-  <p class="sub">Nothing is trained yet — each of these is a fixed number or shortcut in the simulator code that real data doesn't share. Each one is easy to test, and easy to fix, on its own.</p>
+  <p class="sub">From reading the code — nothing trained yet. Bars = how easy to spot (our guess).</p>
 
   <div class="row">
     <div class="col" style="flex:1.25;">
-      <div class="tell">
-        <h3><b>1</b> Every simulated lens has the same shape</h3>
-        <p>The code uses <b>one fixed ellipticity and tilt</b> for every lens, so every arc pattern comes from the same nearly-round mass. Real lenses come in all shapes — see the figure: changing these knobs changes the arcs a lot.</p>
-        <div class="sev"><span>how easy to spot (our guess)</span><span class="sevbar"><i style="width:90%"></i></span></div>
-      </div>
-      <div class="tell">
-        <h3><b>2</b> The arcs always have the same relative brightness</h3>
-        <p>Arc brightness is set to <b>exactly 25% of the lens galaxy's</b>, every time. In real lenses this ratio varies enormously.</p>
-        <div class="sev"><span>how easy to spot</span><span class="sevbar"><i style="width:80%"></i></span></div>
-      </div>
-      <div class="tell">
-        <h3><b>3</b> The arcs' noise looks different from the sky around them</h3>
-        <p>Real JWST noise is slightly smeared between neighboring pixels (an artifact of how images are stacked). The simulated arcs get <b>perfectly independent pixel noise</b> — the texture changes exactly where the simulated part begins.</p>
-        <div class="sev"><span>how easy to spot</span><span class="sevbar"><i style="width:65%"></i></span></div>
-      </div>
-      <div class="tell">
-        <h3><b>4</b> Arcs bend around the image center, not around the galaxy</h3>
-        <p>The invisible mass is pinned to the exact center of the image; the visible galaxy is only <i>near</i> the center. The arcs can curve around a slightly wrong point.</p>
-        <div class="sev"><span>how easy to spot</span><span class="sevbar"><i style="width:55%"></i></span></div>
-      </div>
-      <div class="tell">
-        <h3><b>5</b> The arc looks identical in every color band</h3>
-        <p>One shape is reused in all four wavelength bands, just scaled in brightness. Real young galaxies look <b>clumpier and bluer</b> in the blue bands (right figure).</p>
-        <div class="sev"><span>how easy to spot</span><span class="sevbar"><i style="width:50%"></i></span></div>
-      </div>
-      <div class="tell">
-        <h3><b>6</b> Arc size ignores how big the lens galaxy looks <span style="color:var(--cy)">(v9 fixed this)</span></h3>
-        <p>In v8 a tiny faint galaxy could get a huge arc ring. Nate's v9 ties the mass to the galaxy's measured brightness — which gives us a <b>built-in experiment</b>: the network should find v9 harder to catch than v8. If it doesn't, something's off.</p>
-        <div class="sev"><span>how easy to spot</span><span class="sevbar"><i style="width:45%"></i></span></div>
-      </div>
+      <div class="tell"><b class="no">1</b><span class="t">Every lens has the <b>same shape</b><small>ellipticity &amp; tilt are frozen constants</small></span><span class="sevbar"><i style="width:90%"></i></span></div>
+      <div class="tell"><b class="no">2</b><span class="t">Arc brightness: <b>always 25%</b> of the lens<small>real ratios vary enormously</small></span><span class="sevbar"><i style="width:80%"></i></span></div>
+      <div class="tell"><b class="no">3</b><span class="t">Arc <b>noise texture</b> &ne; surrounding sky<small>independent pixels vs smeared real noise</small></span><span class="sevbar"><i style="width:65%"></i></span></div>
+      <div class="tell"><b class="no">4</b><span class="t">Arcs bend around the <b>image center</b>, not the galaxy</span><span class="sevbar"><i style="width:55%"></i></span></div>
+      <div class="tell"><b class="no">5</b><span class="t"><b>Same arc</b> in all four color bands<small>real sources: clumpier &amp; bluer in blue</small></span><span class="sevbar"><i style="width:50%"></i></span></div>
+      <div class="tell"><b class="no">6</b><span class="t">Arc size <b>ignores lens brightness</b> <span style="color:var(--cy)">— v9 fixed it</span><small>built-in experiment: v9 should be harder to catch than v8</small></span><span class="sevbar"><i style="width:45%"></i></span></div>
     </div>
-
-    <div class="col">
-      <figure class="figure" style="margin-bottom:1rem;">
-        <img src="assets/02_sweeps.png" alt="Parameter sweeps: arc size, shear, source offset">
-        <figcaption><b>From our parameter sweep:</b> arc size (top row), the tug of neighboring galaxies (middle), and source position (bottom) each reshape the arcs dramatically. The simulator freezes the middle-row knobs — so all of that variety is missing (point 1).</figcaption>
-      </figure>
-      <figure class="figure">
-        <img src="assets/03_rgb.png" alt="RGB composite: lens only, arcs only, final">
-        <figcaption><b>Color view:</b> lens only, arcs only, combined. The arc's color is right <i>on average</i>, but it's the same color in every clump (point 5).</figcaption>
-      </figure>
-    </div>
+    <figure class="figure col">
+      <img src="assets/02_sweeps.png" alt="Parameter sweeps" style="max-height:62vh;">
+      <figcaption><b>Our sweep trace:</b> the frozen knobs (middle row) reshape arcs dramatically — variety the sims never show.</figcaption>
+    </figure>
   </div>
-  <div class="foot"><span>these are predictions — the network's job is to confirm or refute them, and to find what's NOT on this list</span><span>2 / 4</span></div>
+  <div class="foot"><span>the network's real job: find what's NOT on this list</span><span>2 / 4</span></div>
 </section>
 
 <!-- ============================ SLIDE 3 ============================ -->
 <section class="slide" id="s3">
   <div class="slide-tag">3 / 4</div>
-  <h2>How we set up a <em>fair test</em></h2>
+  <h2>A <em>fair test</em></h2>
 
-  <div class="row" style="margin-bottom:1.5rem;">
+  <div class="row" style="flex:0 0 auto;margin-bottom:1.2rem;">
     <div class="col box" style="border-color:var(--bad);">
-      <h3 class="bad">The trap</h3>
-      <p>Random sky almost never contains a lens. Compare sims against random sky, and the network just learns <b>"has arcs = fake"</b>. It scores ~100% and teaches us nothing.</p>
+      <h3 class="bad">Trap</h3>
+      <p>vs random sky &rarr; learns <b>"arcs = fake"</b>. 100% score, zero insight.</p>
     </div>
     <div class="col box accent">
-      <h3>The fix</h3>
-      <p>Compare against <b>real lenses</b>. COSMOS-Web contains 440 known real lens systems (the COWLS catalog). Now <i>both</i> piles show a galaxy with arcs — the only way to score well is to judge whether the arcs <b>look real</b>.</p>
+      <h3>Fix</h3>
+      <p>vs the <b>440 known real lenses</b> in the same survey. Both piles have arcs &rarr; must judge <b>realism</b>.</p>
     </div>
     <div class="col box">
-      <h3>The honesty check</h3>
-      <p>We also run <b>real vs real</b> through the same pipeline. A fair setup must score ~50% (a coin flip) there. If it doesn't, <i>our</i> pipeline is biased and no result can be trusted.</p>
+      <h3>Honesty check</h3>
+      <p><b>Real vs real</b> must score ~50%, or our pipeline is biased.</p>
     </div>
   </div>
 
   <div class="row">
     <div class="col">
-      <h3>One problem: the simulator only has 46 backgrounds</h3>
-      <p class="sub" style="font-size:1.05rem;">Every sim is built on one of just 46 real galaxy cutouts — a network could simply memorize them. Good news: Nate's v9 catalogs already list <b style="color:var(--fg)">1,015 suitable galaxies</b>, and 242 of them sit in data we already have on disk.</p>
+      <h3>Backgrounds to build on <span style="color:var(--mut);font-size:1.05rem;">(46 today = memorizable)</span></h3>
       <div class="bars">
         <div class="bar"><span class="lbl">today (v8)</span><span class="track"><i style="width:2%"></i></span><span class="n">46</span></div>
         <div class="bar"><span class="lbl">+ data on disk</span><span class="track"><i style="width:11%"></i></span><span class="n">242</span></div>
         <div class="bar"><span class="lbl">+ public downloads</span><span class="track"><i style="width:45%"></i></span><span class="n">1,015</span></div>
         <div class="bar"><span class="lbl">+ more catalogs</span><span class="track"><i style="width:100%"></i></span><span class="n">2,251</span></div>
       </div>
+      <p class="sub" style="font-size:1.1rem;">Coordinates from Nate's v9 catalogs — already in the repo.</p>
     </div>
     <div class="col">
-      <h3>The plan, in order</h3>
+      <h3>Plan</h3>
       <ol class="steps">
-        <li><div><b>Cut out the images.</b> <span>242 background galaxies + the 440 real lenses, from data already on disk.</span></div><span class="eff">a little work</span></li>
-        <li><div><b>Simple test first.</b> <span>Before any neural network: can basic statistics already separate the piles? Sets the bar to beat.</span></div><span class="eff">a little work</span></li>
-        <li><div><b>Train a small network</b> <span>and run the honesty check.</span></div><span class="eff">a lot of work</span></li>
-        <li><div><b>Read its mind.</b> <span>Heatmaps of where it looked; which color band mattered; which systems fooled it.</span></div><span class="eff">moderate</span></li>
-        <li><div><b>Report &rarr; Nate fixes &rarr; repeat.</b> <span>Each round, the network has to work harder. That's the simulator getting better.</span></div><span class="eff">ongoing</span></li>
+        <li><b>Cut out images</b> (backgrounds + real lenses)<span class="eff">a little work</span></li>
+        <li><b>Simple statistics first</b> — the bar to beat<span class="eff">a little work</span></li>
+        <li><b>Train small network</b> + honesty check<span class="eff">a lot of work</span></li>
+        <li><b>Read its mind</b> — heatmaps, color ablations<span class="eff">moderate</span></li>
+        <li><b>Report &rarr; Nate fixes &rarr; repeat</b><span class="eff">ongoing</span></li>
       </ol>
     </div>
   </div>
@@ -206,49 +169,36 @@ td b{color:var(--fg);}
 <!-- ============================ SLIDE 4 ============================ -->
 <section class="slide" id="s4">
   <div class="slide-tag">4 / 4</div>
-  <h2>What can go wrong <em>&amp; what we ask</em></h2>
+  <h2>Risks <em>&amp; asks</em></h2>
 
-  <table style="margin-bottom:1.5rem;">
-    <tr><th style="width:30%">Risk</th><th>What we do about it</th></tr>
-    <tr>
-      <td><span class="warn">It memorizes the backgrounds.</span><br>Like a student memorizing answers instead of learning.</td>
-      <td>Never test on a background galaxy it saw in training, and grow the pool 46 &rarr; 242 &rarr; 1,000+.</td>
-    </tr>
-    <tr>
-      <td><span class="warn">Only ~440 real lenses exist.</span><br>That's nature's limit — small data for a neural network.</td>
-      <td>Keep the network tiny, judge small image patches (hundreds per image) instead of whole images, and cross-check every result on multiple data splits.</td>
-    </tr>
-    <tr>
-      <td><span class="warn">It wins on something boring.</span><br>e.g. it catches the fixed 25% brightness immediately and stops looking deeper.</td>
-      <td>That's still a result — fix it, regenerate, train again. Each round peels off one layer.</td>
-    </tr>
-    <tr>
-      <td><span class="warn">Mixing telescope surveys.</span><br>Galaxies from other JWST surveys look different (depth, blur) — the network could detect the <i>survey</i>, not the realism.</td>
-      <td>The main test stays within COSMOS-Web only; other surveys are used only to add training variety.</td>
-    </tr>
+  <table style="margin-bottom:1.2rem;">
+    <tr><th style="width:38%">Risk</th><th>Answer</th></tr>
+    <tr><td class="warn">Memorizes the 46 backgrounds</td><td>Never test on a background seen in training; grow the pool.</td></tr>
+    <tr><td class="warn">Only ~440 real lenses exist</td><td>Tiny network; judge patches, not whole images.</td></tr>
+    <tr><td class="warn">Wins on something boring</td><td>Still a result — fix it, regenerate, go again.</td></tr>
+    <tr><td class="warn">Detects the <i>survey</i>, not realism</td><td>Main test stays within COSMOS-Web only.</td></tr>
   </table>
 
-  <div class="row">
+  <div class="row" style="flex:0 0 auto;">
     <div class="col box accent">
       <h3>Asks for Nate</h3>
-      <p>
-        &bull; A small flag to generate <b>lensed images only</b> (the current setup caps a dataset at 92 images)<br>
-        &bull; Sanity-check our background-galaxy cutouts against your v9 lists<br>
-        &bull; Longer term: run your galaxy selection over the full survey &rarr; thousands of backgrounds<br>
-        &bull; Which of the six predictions do <b>you</b> already suspect? It helps us prioritize.
-      </p>
+      <ul class="plain">
+        <li>&bull; A <b>lensed-only flag</b> (current cap: 92 images)</li>
+        <li>&bull; Sanity-check our cutouts vs your v9 lists</li>
+        <li>&bull; Which of the six do <b>you</b> suspect already?</li>
+      </ul>
     </div>
     <div class="col box">
-      <h3>What we start now</h3>
-      <p>
-        &bull; The two cut-out scripts (backgrounds + real lenses)<br>
-        &bull; The honesty check and the simple statistics baseline<br>
-        &bull; Two checks that need no images at all: compare the simulated arc brightnesses and arc sizes against the real COWLS catalog numbers
-      </p>
+      <h3>We start now</h3>
+      <ul class="plain">
+        <li>&bull; The two cut-out scripts</li>
+        <li>&bull; Honesty check + statistics baseline</li>
+        <li>&bull; Catalog-only checks: arc brightness &amp; size distributions</li>
+      </ul>
     </div>
   </div>
 
-  <p class="sub" style="margin-top:1.5rem;font-size:1.15rem;">Bottom line: the network is the cheap part — <b style="color:var(--fg)">choosing the right comparison data is the science</b>, and the catalogs that fix it are already in the repo.</p>
+  <p class="sub" style="margin-top:1.2rem;font-size:1.3rem;">The network is cheap — <b style="color:var(--fg)">the comparison data is the science</b>.</p>
   <div class="foot"><span>repo: Chemsitry/agenticlenssimgan · 2026-06-10</span><span>4 / 4 · end</span></div>
 </section>
 
