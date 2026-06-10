@@ -1,6 +1,6 @@
-# GAN Plan: Diagnosing `simulate_v3`
+# GAN Plan: Diagnosing the lens simulator (v3 → v9)
 
-A staged technical plan for building a GAN whose **purpose is to find what's wrong with the simulator**, not to generate pretty images. The discriminator is the deliverable.
+A staged technical plan for building a GAN whose **purpose is to find what's wrong with the simulator**, not to generate pretty images. The discriminator is the deliverable. Originally written against `simulate_v3`; the UPDATE sections below retarget it to v8/v9, and the **2026-06-10 section defines the data workflow** (scene-pool expansion + dataset piles) that the stages now assume.
 
 Author note: [gan_architecture_proposals.html](gan_architecture_proposals.html) was **rewritten on 2026-06-09** for the v8/v9 era — it now decides *what* to build and *which real dataset to compare against* (the five data options A–E); this plan covers *how* to execute. The original HTML (an image-refinement survey for v3) is preserved in git history. Our goal (set 2026-05-26) is diagnostic: the lead professor can see a sim-vs-real mismatch we can't; a second colleague's PCA found a signal; we want a tool that tells us **where** the simulator disagrees with real JWST data so we can fix it. Section 0 below critiques the *original* HTML and is kept for the record.
 
@@ -42,7 +42,55 @@ These are exactly the kinds of "tells" our diagnostic discriminator is designed 
 6. **New Stage 4 hypothesis from v9:** v8's mass–light inconsistency is visible in images as "arc radius (θ_E) uncorrelated with lens-galaxy brightness." Add `D_score vs (θ_E, lens scene brightness)` to the Stage 5.3 parameter-correlation list; comparing D on v8 vs v9 output tests whether the Faber–Jackson fix closed a real gap.
 7. **Feedback deliverable for the colleague** now has a concrete shape: (a) confirmation that the four fixed bugs are no longer detectable by D; (b) ranked list of *remaining* detectable differences (heatmaps + parameter correlations); (c) for v9 specifically, whether the σ_v↔photometry consistency improved D-resistance relative to v8.
 8. **Companion documents (2026-06-09):** [simulate_v8_explainer.html](simulate_v8_explainer.html) explains the v8 data inputs/outputs and lists the hard-coded quirks; the rewritten [gan_architecture_proposals.html](gan_architecture_proposals.html) works through the central question of *which real dataset to compare the sims against* (recommended: real COWLS lens cutouts vs lensed sims, with a real-vs-real null control) and the v8-era architecture recommendation. Read both before Stage 0.
-9. **Dataset-size warning:** `simulate_v8.py` caps at `--n 92` (46 scenes; non-lensed samples must be unique). The 30k-image targets in the stages below were written for v3 and are unreachable in v8 until the scene pool grows — plan accordingly and prefer patch-level training.
+9. **Dataset-size warning:** `simulate_v8.py` caps at `--n 92` (46 scenes; non-lensed samples must be unique). The 30k-image targets in the stages below were written for v3 and are unreachable in v8 as shipped. **Resolved by the 2026-06-10 update below** — the v9 catalogs already in the repo grow the scene pool to 242 (COSMOS, zero downloads) and ~1,000+ (public mosaics), and a lensed-only patch removes the 92-image cap.
+
+---
+
+## UPDATE 2026-06-10 — the scene-pool bottleneck and the v9 data workflow
+
+This section supersedes every dataset-size assumption in the stages below (“M ≈ 30,000”, “`--n 30000`”, etc.), which were written when the simulator could render unlimited fully-synthetic images. In the v8/v9 single-real-scene architecture, dataset size is limited by **how many real elliptical-centered cutouts (“scenes”) exist**, and v8 ships with only 46.
+
+### What is already sitting in the repo (the colleague half-solved this)
+
+The v9 work includes scene *catalogs* (the pixels stayed on his machine, but the coordinates are in git):
+
+| File | Contents | Usable how |
+|---|---|---|
+| `v9_consistent/lens_scene_galaxies.csv` | **1,015 scene galaxies** with RA/Dec, Legacy-Survey photo-z + morphology (DEV/EXP/SER/REX), F444W peak, compactness. Field breakdown: **242 `primer_cosmos`** (in the COSMOS mosaic already on NERSC disk), 523 `primer_uds`, 131 `jades_gdn`, 119 `ceers_egs`. | Direct cutout extraction at RA/Dec |
+| `v9_consistent/jades_dr5_elliptical_galaxies.csv` | **1,236 confirmed ellipticals** (477 GOODS-N, 759 GOODS-S) | Merged by `prep_scenes_v12.py` for a further pool expansion |
+| `v9_consistent/calibration_galaxies.csv` | 49 DESI-σ_v galaxies behind the Faber–Jackson fit | σ_v ground truth; 31 of the scenes get *measured* σ_v |
+| `v9_consistent/prep_scenes_v9..v12.py` | The scene extractors themselves | **Hard-coded to `/Users/nathankvinnesland/...` paths** — must be ported to NERSC paths; the non-COSMOS mosaics live in his local `cache_mosaics/` |
+
+### The data workflow we adopt
+
+**Phase A — 242 COSMOS scenes, zero downloads (do first).**
+New script `gan/data/prep_scenes_from_catalog.py`: read `lens_scene_galaxies.csv`, keep `source_field == primer_cosmos`, convert RA/Dec → pixels via the mosaic WCS (`raw_data/1727_mosaic/`), extract 630×630×4-band cutouts with the same background-subtraction/calibration as `prep_scenes_v8.py`, save scenes + a manifest carrying photo-z and morphology (needed by v9's FJ σ_v derivation). Result: **5× the v8 pool**, same survey as the COWLS reals.
+
+**Phase B — +~770 scenes from public mosaics (a weekend of downloads).**
+PRIMER-UDS (523), JADES GOODS-N (131), and CEERS-EGS (119) mosaics are public on MAST; download into a NERSC `cache_mosaics/` and port `calib_mosaic_paths()` from `v9_consistent/prep_scenes_v12.py`. Two caveats from his own code/catalog: (1) CEERS lacks F444W — those scenes are zero-padded in that band (`has_F444W=False` in the CSV); exclude them from any color-sensitive analysis. (2) **Field-signature confound:** different surveys have different depth/PSF/noise, so a discriminator can classify *field* instead of *realism*. Rules: compute normalization stats per field; keep field composition matched between the two piles of any experiment; and since the real-lens pile (COWLS) is COSMOS-only, **the primary Option B comparison uses sims built on the 242 COSMOS scenes only** — Phases B scenes serve training variety, the Option C/D experiments, and v8-vs-v9 shootouts.
+
+**Phase C — beyond 1,000 (feedback for the colleague).**
+The selection is fully catalog-driven (Legacy morphology + brightness > 100 sim units + compactness < 0.35), so it scales to thousands over the full COSMOS-Web footprint. Put this in the feedback report — it's his pipeline to extend.
+
+### Getting many images out of few scenes
+
+- **Lensed-only generation.** The non-lensed sim class is literally untouched real data — useless for sim-vs-real and the sole cause of the `--n 92` cap (unique-scene constraint). Patch `simulate_v8.py`/v9 with a `--lensed-only` flag (~10 lines); each scene can then host many systems (different VELA stamp, θ_E, angle, noise seed). 242 scenes × ~20 systems ≈ 5k lensed images.
+- **Free noise re-realizations.** `arcs_{band}.npy` is saved noiseless and `galaxies_{band}.npy` is the clean scene, so `image = galaxies + poisson(arcs)` regenerates fresh noise without rerunning lenstronomy — unlimited augmentation at the noise level.
+- **Patches are the effective sample.** A 70-px PatchGAN sees ~80 quasi-independent patches per 630-px image; 242 scenes ≈ 20k patches. Plus 8× dihedral flips and random 224 crops.
+- **The split rule becomes critical:** augmentation must never cross the split — split by scene ID (sims), by system (reals), and stratify by field. A random image-level split with scene reuse silently leaks backgrounds and inflates accuracy.
+- **Model class follows sample size.** The real-lens pile is ~440 forever (nature's limit). At N~10²–10³, prefer Stage 0 PCA, frozen-pretrained-feature linear probes, and k-fold CV; keep the Stage 2 D small (≤3M params).
+
+### Revised dataset piles (replaces the v3-era “30k random cutouts” target)
+
+| Pile | Source | Size | Used in |
+|---|---|---|---|
+| Sim lensed (COSMOS) | v9 sim on the 242 Phase-A scenes, `--lensed-only` | ~5k | **Option B (primary)**, D, E |
+| Real lenses | `prep_cowls_cutouts.py` at `cowls_catalogue.csv` RA/Dec (same on-disk mosaics) | 440 (fewer after grade cuts) | **Option B (primary)** |
+| Real scene-style, held out | Catalog positions *not* used as sim scenes | ~10² | Option C null control |
+| Random real cutouts | `gan/data/prep_real_targets.py` (exists) | unlimited | Option A smoke test, stats |
+| Sim lensed (other fields) | v9 sim on Phase-B scenes | ~10k | variety, v8-vs-v9 shootout |
+
+Option letters refer to [gan_architecture_proposals.html](gan_architecture_proposals.html). Where the stages below say “30k real cutouts” or “`--n 30000`”, read this table instead.
 
 ---
 
@@ -695,7 +743,7 @@ These are decisions that don't change the structure of the plan, but you'll need
 
 A short pitch you could give the colleague at the end:
 
-> "We built a 4-band PatchGAN discriminator that can tell `simulate_v3` outputs from random COSMOS-Web cutouts with X% accuracy on a held-out test set, beating a 50-component PCA baseline by Y points. The discriminator's per-patch attention maps consistently highlight [arc edges / F444W background / lens-galaxy edges / …]; its per-image score correlates most strongly with [theta_E / z_source / lens stamp ID / …]. We proposed and tested three simulator changes targeting those features. After all three, GAN accuracy fell from X% to Z%, indicating the simulator now matches real JWST data in the dimensions the GAN could measure. Remaining gap: [a clear statement of what the GAN couldn't capture, sent back to the prof]."
+> "We built a 4-band PatchGAN discriminator that can tell v9 lensed sims from real COWLS lens cutouts with X% accuracy on a scene-disjoint held-out test set, beating a 50-component PCA baseline by Y points (and scoring ~50% on the real-vs-real null control, so the pipeline is unbiased). The discriminator's per-patch attention maps consistently highlight [arc seams / arc colors / lens–arc geometry / …]; its per-image score correlates most strongly with [theta_E / z_source / VELA stamp ID / scene ID / …]. v9 output is Z points harder to discriminate than v8, confirming the Faber–Jackson consistency fix closed a visible gap. We proposed N further simulator changes targeting the remaining features, plus the scene-pool expansion (242 → thousands via the catalog-driven selection). Remaining gap: [a clear statement of what the GAN couldn't capture, sent back to the prof]."
 
 That paragraph is the goal of the whole plan. Every stage exists to make some clause of that paragraph factually true.
 
@@ -705,12 +753,13 @@ That paragraph is the goal of the whole plan. Every stage exists to make some cl
 
 | Stage | What | Effort | Blocking for |
 |---|---|---|---|
+| A | Scene-pool Phase A: 242 COSMOS scenes + COWLS cutouts + lensed-only patch (2026-06-10 update) | 2–3 days | everything below |
 | 0 | Data prep + PCA baseline | 2 days | everything |
-| 1 | Simulator metadata + jitter | 2 days | Stage 2 onwards |
-| 2 | D-only classifier | 3 days | Stage 3 |
+| 1 | ~~Simulator metadata + jitter~~ (moot for v8/v9) → Phase B downloads instead | 2 days | Stage 2 variety |
+| 2 | D-only classifier (Option B piles, split by scene/system) | 3 days | Stage 3 |
 | 3 | Full GAN | 1–2 wk | Stage 4 |
 | 4 | Interpretability | 1 wk | Stage 5 |
-| 5 | Sim–GAN co-iteration | 3–6 wk | (final deliverable) |
+| 5 | Sim–GAN co-iteration (incl. v8-vs-v9 shootout) | 3–6 wk | (final deliverable) |
 
 Total realistic timeline: **6–10 weeks** of focused work, with the colleague reviewing simulator changes between Stages 1 and 5.
 
