@@ -199,6 +199,8 @@ Refine simulated images using a SimGAN trained on real galaxy morphology:
 | File | Purpose |
 |------|---------|
 | `gan_plan.md` | Staged plan: train a discriminator to find where the simulator disagrees with real JWST data |
+| `gan_architecture_proposals.html` | What to build now (v8/v9 era): which real dataset to compare against (options A-E) + recommended discriminator |
+| `simulate_v8_explainer.html` | v8 pipeline & data explainer: inputs, outputs, hard-coded quirks |
 | `gan/` | Diagnostic GAN code (data prep, audits, PCA baseline, slurm scripts) |
 
 ### ML Training

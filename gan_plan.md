@@ -2,7 +2,7 @@
 
 A staged technical plan for building a GAN whose **purpose is to find what's wrong with the simulator**, not to generate pretty images. The discriminator is the deliverable.
 
-Author note: this plan replaces the recommendation in [gan_architecture_proposals.html](gan_architecture_proposals.html). That HTML assumes the goal is image-refinement-for-downstream-use. Our actual goal (set 2026-05-26) is diagnostic: the lead professor can see a sim-vs-real mismatch we can't; a second colleague's PCA found a signal; we want a tool that tells us **where** simulate_v3 disagrees with real JWST data so we can fix the simulator.
+Author note: [gan_architecture_proposals.html](gan_architecture_proposals.html) was **rewritten on 2026-06-09** for the v8/v9 era — it now decides *what* to build and *which real dataset to compare against* (the five data options A–E); this plan covers *how* to execute. The original HTML (an image-refinement survey for v3) is preserved in git history. Our goal (set 2026-05-26) is diagnostic: the lead professor can see a sim-vs-real mismatch we can't; a second colleague's PCA found a signal; we want a tool that tells us **where** the simulator disagrees with real JWST data so we can fix it. Section 0 below critiques the *original* HTML and is kept for the record.
 
 ---
 
@@ -41,6 +41,8 @@ These are exactly the kinds of "tells" our diagnostic discriminator is designed 
 5. **Free validation of our pipeline (recommended first experiment):** the colleague's fixed bugs give us before/after datasets. Generate a small pre-fix dataset (e.g. `git checkout cc6ce01 -- simulate_v8.py`, run, restore) and a post-fix one; our Stage 2 D should separate pre-fix sims from real *easily* (flat-SED arcs) and post-fix sims less easily. If D can't catch a bug we *know* was there, the pipeline isn't ready to hunt unknown bugs.
 6. **New Stage 4 hypothesis from v9:** v8's mass–light inconsistency is visible in images as "arc radius (θ_E) uncorrelated with lens-galaxy brightness." Add `D_score vs (θ_E, lens scene brightness)` to the Stage 5.3 parameter-correlation list; comparing D on v8 vs v9 output tests whether the Faber–Jackson fix closed a real gap.
 7. **Feedback deliverable for the colleague** now has a concrete shape: (a) confirmation that the four fixed bugs are no longer detectable by D; (b) ranked list of *remaining* detectable differences (heatmaps + parameter correlations); (c) for v9 specifically, whether the σ_v↔photometry consistency improved D-resistance relative to v8.
+8. **Companion documents (2026-06-09):** [simulate_v8_explainer.html](simulate_v8_explainer.html) explains the v8 data inputs/outputs and lists the hard-coded quirks; the rewritten [gan_architecture_proposals.html](gan_architecture_proposals.html) works through the central question of *which real dataset to compare the sims against* (recommended: real COWLS lens cutouts vs lensed sims, with a real-vs-real null control) and the v8-era architecture recommendation. Read both before Stage 0.
+9. **Dataset-size warning:** `simulate_v8.py` caps at `--n 92` (46 scenes; non-lensed samples must be unique). The 30k-image targets in the stages below were written for v3 and are unreachable in v8 until the scene pool grows — plan accordingly and prefer patch-level training.
 
 ---
 

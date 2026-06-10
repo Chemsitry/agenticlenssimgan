@@ -1,1333 +1,271 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GAN Proposals for Agentic COSMOS-Web Lens Simulation</title>
-  <style>
-    :root {
-      --ink: #17202a;
-      --muted: #5d6877;
-      --paper: #fbfbf8;
-      --line: #d8ddd8;
-      --blue: #22577a;
-      --green: #2f6f4e;
-      --amber: #9a6518;
-      --red: #9d3535;
-      --violet: #604b8f;
-      --sky: #dcecf3;
-      --leaf: #e2efe5;
-      --sand: #f2ead8;
-      --rose: #f1dfdf;
-      --lav: #e8e2f1;
-      --code: #101820;
-      --codeText: #eef5f7;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      background: var(--paper);
-      color: var(--ink);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      line-height: 1.55;
-      letter-spacing: 0;
-    }
-
-    header {
-      padding: 48px 24px 30px;
-      border-bottom: 1px solid var(--line);
-      background: #f5f7f2;
-    }
-
-    main {
-      width: min(1180px, calc(100% - 36px));
-      margin: 0 auto;
-      padding: 28px 0 56px;
-    }
-
-    .hero {
-      width: min(1180px, calc(100% - 36px));
-      margin: 0 auto;
-    }
-
-    .eyebrow {
-      margin: 0 0 10px;
-      color: var(--green);
-      font-weight: 800;
-      text-transform: uppercase;
-      font-size: 0.78rem;
-      letter-spacing: 0.08em;
-    }
-
-    h1 {
-      max-width: 880px;
-      margin: 0;
-      font-size: clamp(2.1rem, 5vw, 4.8rem);
-      line-height: 0.98;
-      letter-spacing: 0;
-    }
-
-    .subtitle {
-      max-width: 880px;
-      margin: 20px 0 0;
-      color: var(--muted);
-      font-size: 1.12rem;
-    }
-
-    nav {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 24px;
-    }
-
-    nav a,
-    .tag {
-      display: inline-flex;
-      align-items: center;
-      min-height: 34px;
-      padding: 7px 11px;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: #ffffff;
-      color: var(--ink);
-      text-decoration: none;
-      font-size: 0.9rem;
-      font-weight: 700;
-    }
-
-    section {
-      padding: 34px 0;
-      border-bottom: 1px solid var(--line);
-    }
-
-    h2 {
-      margin: 0 0 16px;
-      font-size: 1.65rem;
-      line-height: 1.15;
-      letter-spacing: 0;
-    }
-
-    h3 {
-      margin: 0 0 10px;
-      font-size: 1.08rem;
-      line-height: 1.2;
-      letter-spacing: 0;
-    }
-
-    p {
-      margin: 0 0 14px;
-    }
-
-    a {
-      color: var(--blue);
-      text-decoration-thickness: 1px;
-      text-underline-offset: 3px;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(12, 1fr);
-      gap: 14px;
-      align-items: start;
-    }
-
-    .span-3 { grid-column: span 3; }
-    .span-4 { grid-column: span 4; }
-    .span-5 { grid-column: span 5; }
-    .span-6 { grid-column: span 6; }
-    .span-7 { grid-column: span 7; }
-    .span-8 { grid-column: span 8; }
-    .span-12 { grid-column: span 12; }
-
-    .card {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #ffffff;
-      padding: 18px;
-      min-width: 0;
-    }
-
-    .note {
-      border-left: 5px solid var(--blue);
-      background: var(--sky);
-      padding: 15px 17px;
-      border-radius: 0 8px 8px 0;
-    }
-
-    .good {
-      border-left-color: var(--green);
-      background: var(--leaf);
-    }
-
-    .warn {
-      border-left-color: var(--amber);
-      background: var(--sand);
-    }
-
-    .danger {
-      border-left-color: var(--red);
-      background: var(--rose);
-    }
-
-    .violet {
-      border-left-color: var(--violet);
-      background: var(--lav);
-    }
-
-    .kicker {
-      color: var(--muted);
-      font-size: 0.92rem;
-      font-weight: 700;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-    }
-
-    .rec {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 6px;
-      padding: 5px 8px;
-      font-size: 0.78rem;
-      font-weight: 800;
-      color: #ffffff;
-      background: var(--green);
-      margin-bottom: 10px;
-    }
-
-    .risk {
-      background: var(--amber);
-    }
-
-    .later {
-      background: var(--violet);
-    }
-
-    .flow {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 9px;
-      align-items: center;
-      margin: 14px 0;
-    }
-
-    .node {
-      min-height: 70px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #ffffff;
-      padding: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      font-weight: 800;
-      font-size: 0.92rem;
-    }
-
-    .arrow {
-      text-align: center;
-      color: var(--muted);
-      font-weight: 900;
-    }
-
-    .metric {
-      display: grid;
-      gap: 6px;
-      min-height: 136px;
-    }
-
-    .metric strong {
-      font-size: 1.02rem;
-    }
-
-    .metric small {
-      color: var(--muted);
-      line-height: 1.45;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: #ffffff;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    th,
-    td {
-      padding: 11px 12px;
-      border-bottom: 1px solid var(--line);
-      text-align: left;
-      vertical-align: top;
-      font-size: 0.94rem;
-    }
-
-    th {
-      background: #edf2ef;
-      font-size: 0.82rem;
-      text-transform: uppercase;
-      color: #394452;
-    }
-
-    tr:last-child td {
-      border-bottom: none;
-    }
-
-    ul {
-      margin: 8px 0 0 20px;
-      padding: 0;
-    }
-
-    li {
-      margin: 6px 0;
-    }
-
-    code {
-      font-family: "Cascadia Mono", Consolas, "Liberation Mono", Menlo, monospace;
-      font-size: 0.92em;
-      background: #edf2ef;
-      border: 1px solid #d6ded9;
-      border-radius: 4px;
-      padding: 1px 5px;
-    }
-
-    pre {
-      margin: 14px 0 0;
-      padding: 16px;
-      overflow-x: auto;
-      background: var(--code);
-      color: var(--codeText);
-      border-radius: 8px;
-      font-size: 0.88rem;
-      line-height: 1.45;
-    }
-
-    pre code {
-      padding: 0;
-      border: 0;
-      background: transparent;
-      color: inherit;
-    }
-
-    figure {
-      margin: 0;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      overflow: hidden;
-      background: #ffffff;
-    }
-
-    figure img {
-      display: block;
-      width: 100%;
-      height: auto;
-      background: #ffffff;
-    }
-
-    figcaption {
-      padding: 9px 12px;
-      color: var(--muted);
-      font-size: 0.86rem;
-      border-top: 1px solid var(--line);
-    }
-
-    .callout-title {
-      font-weight: 900;
-      margin-bottom: 5px;
-    }
-
-    .pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 10px 0 0;
-    }
-
-    .check {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #ffffff;
-      padding: 14px;
-    }
-
-    .check strong {
-      display: block;
-      margin-bottom: 6px;
-    }
-
-    .footer {
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    @media (max-width: 880px) {
-      header {
-        padding-top: 34px;
-      }
-
-      .span-3,
-      .span-4,
-      .span-5,
-      .span-6,
-      .span-7,
-      .span-8 {
-        grid-column: span 12;
-      }
-
-      .flow {
-        grid-template-columns: 1fr;
-      }
-
-      .arrow {
-        transform: rotate(90deg);
-      }
-
-      th,
-      td {
-        font-size: 0.88rem;
-      }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAN design for the v8/v9 simulator — what to build now</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface-2:#1c2128;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--yellow:#d29922;--purple:#bc8cff;--red:#f85149;--orange:#ffa657;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.6;padding-bottom:4rem;}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:2rem 2.5rem;}
+header h1{font-size:clamp(1.4rem,1.6vw,1.9rem);color:var(--accent);margin-bottom:.35rem;}
+header p{color:var(--muted);max-width:80ch;}
+.badge{display:inline-block;background:#21262d;border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:.75rem;margin:.25rem .25rem 0 0;color:var(--muted);}
+nav{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:.6rem 2.5rem;z-index:10;display:flex;flex-wrap:wrap;gap:.4rem;}
+nav a{color:var(--muted);text-decoration:none;font-size:.82rem;padding:.25rem .6rem;border:1px solid transparent;border-radius:6px;}
+nav a:hover{color:var(--accent);border-color:var(--border);background:#21262d;}
+main{max-width:1100px;margin:0 auto;padding:2rem 2.5rem;}
+section{margin-bottom:3rem;}
+h2{color:var(--accent);font-size:1.25rem;margin-bottom:.8rem;border-bottom:1px solid var(--border);padding-bottom:.4rem;}
+h3{color:var(--text);font-size:1.02rem;margin:1.2rem 0 .5rem;}
+p{margin-bottom:.8rem;max-width:92ch;}
+code{background:#21262d;border:1px solid var(--border);border-radius:4px;padding:.1em .35em;font-size:.86em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--orange);}
+pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;overflow-x:auto;margin:.8rem 0;font-size:.82rem;line-height:1.5;}
+pre code{background:none;border:none;padding:0;color:var(--text);}
+table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.86rem;}
+th,td{border:1px solid var(--border);padding:.5rem .7rem;text-align:left;vertical-align:top;}
+th{background:var(--surface);color:var(--accent);}
+tr:nth-child(even){background:var(--surface-2);}
+.callout{border-radius:8px;padding:1rem 1.15rem;margin:1rem 0;font-size:.88rem;display:flex;gap:.85rem;}
+.callout-physics{background:#1a2332;border-left:4px solid var(--accent);}
+.callout-warn{background:#2d2016;border-left:4px solid var(--orange);}
+.callout-success{background:#162014;border-left:4px solid var(--green);}
+.callout-danger{background:#2d1618;border-left:4px solid var(--red);}
+.callout-icon{font-size:1.2rem;flex:0 0 auto;margin-top:.1rem;}
+.callout-body h5{color:var(--text);margin-bottom:.3rem;font-size:.9rem;}
+.rec{display:inline-block;border-radius:6px;padding:3px 9px;font-size:.74rem;font-weight:800;color:#fff;background:var(--green);}
+.risk{background:var(--yellow);color:#0d1117;}
+.later{background:var(--purple);}
+.avoid{background:var(--red);}
+.flow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:center;margin:14px 0;}
+.node{min-height:64px;border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:10px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:.82rem;}
+.arrow{text-align:center;color:var(--muted);font-weight:900;}
+.muted{color:var(--muted);}
+ul,ol{margin:0 0 .8rem 1.4rem;}
+li{margin-bottom:.35rem;}
+@media (max-width:900px){.flow{grid-template-columns:1fr;}.arrow{transform:rotate(90deg);}}
+</style>
 </head>
 <body>
-  <header>
-    <div class="hero">
-      <p class="eyebrow">Simulation-aware GAN design notes</p>
-      <h1>Simple GAN architectures for adapting the v3 lens simulator to real JWST images</h1>
-      <p class="subtitle">
-        Written after reading the current <code>agenticlenssim</code> simulator and the older
-        <code>lenssim/gan</code> attempt. The goal is not to replace the physics; it is to make the
-        simulated images live in the same parameter and observational distribution as real JWST
-        cutouts while preserving the lensing signal.
-      </p>
-      <p class="subtitle" style="border-left:4px solid #d29922;padding-left:.8em;">
-        <strong>Superseded notice (2026-06-09):</strong> this document targets <code>simulate_v3</code> and an
-        image-refinement goal. The working plan is now <a href="gan_plan.md"><code>gan_plan.md</code></a> (diagnostic
-        discriminator), and the colleague's simulator has advanced to v8 (single real-scene architecture,
-        <code>simulate_v8.py</code>) and v9 (<code>v9_consistent/</code>, photometry-consistent lens mass). Several concerns
-        raised here &mdash; the centered-lens shortcut, synthetic backgrounds, flat arc SEDs &mdash; were since
-        fixed or made moot by v6&ndash;v9; see the &ldquo;UPDATE 2026-06-09&rdquo; section of <code>gan_plan.md</code>.
-      </p>
-      <nav>
-        <a href="#bottom-line">Bottom line</a>
-        <a href="#simulator">What v3 gives us</a>
-        <a href="#parameter-calibration">Parameter calibration</a>
-        <a href="#old-gan">Old GAN postmortem</a>
-        <a href="#architectures">Architectures</a>
-        <a href="#data">Data recipe</a>
-        <a href="#evaluation">Evaluation</a>
-        <a href="#roadmap">NERSC roadmap</a>
-      </nav>
+<header>
+  <h1>GAN design for the v8/v9 simulator — what to build now</h1>
+  <p><strong>Complete rewrite, 2026-06-09.</strong> The previous version of this document surveyed six architectures for adapting the <em>v3</em> simulator and recommended a parameter-calibration MLP + residual SimGAN. All of that is obsolete: the simulator is now v8/v9 (one real JWST scene per sample, only the arcs simulated), Nate has <em>already built and run</em> a refiner SimGAN (<code>train_simgan.py</code>), and our goal is diagnostic feedback, not image refinement. The old document survives in git history (<code>git show 319b077:gan_architecture_proposals.html</code>).</p>
+  <div style="margin-top:.8rem;">
+    <span class="badge">v8 / v9 era</span><span class="badge">discriminator-first</span><span class="badge">4-band PatchGAN</span><span class="badge">dataset design &gt; architecture</span><span class="badge">Rewritten 2026-06-09</span>
+  </div>
+</header>
+
+<nav>
+  <a href="#bottom-line">Bottom line</a>
+  <a href="#what-changed">What changed</a>
+  <a href="#simgan-postmortem">Nate's SimGAN postmortem</a>
+  <a href="#central-question">The central question</a>
+  <a href="#options">Data options A–E</a>
+  <a href="#scene-bottleneck">The 46-scene bottleneck</a>
+  <a href="#architecture">Recommended build</a>
+  <a href="#tells">Predicted tells</a>
+  <a href="#roadmap">Roadmap</a>
+</nav>
+
+<main>
+
+<section id="bottom-line">
+  <h2>Bottom line</h2>
+  <p><span class="rec">RECOMMENDED</span>&nbsp; Build a <strong>discriminator, not another refiner</strong>: a small 4-band PatchGAN classifier with spectral normalization and hinge loss, plus an interpretability layer (patch heatmaps, per-band ablations, parameter correlations). The discriminator's <em>explanation</em> of how it tells sim from real is the feedback deliverable for Nate.</p>
+  <p>But in the v8 era, <strong>the choice of comparison dataset matters more than the network architecture</strong>. v8 images are ~99% real pixels; the only simulated content is the lensed arcs. Choose the wrong "real" set and your discriminator becomes a trivial arc detector that teaches you nothing. The primary recommendation:</p>
+  <div class="callout callout-success">
+    <div class="callout-icon">&#127919;</div>
+    <div class="callout-body">
+      <h5>Primary experiment</h5>
+      <p>Compare <strong>v8/v9 lensed sims</strong> against <strong>real lens cutouts extracted at the 440 COWLS catalogue positions</strong> (Option B below) — both classes then contain a lens galaxy plus arcs, so the discriminator is forced to judge whether the <em>arcs look real</em>, which is the only thing v8 actually simulates. Run Option C (a null test that should score ~50%) alongside it as a unit test of your data pipeline.</p>
     </div>
-  </header>
+  </div>
+</section>
 
-  <main>
-    <section id="bottom-line">
-      <div class="grid">
-        <div class="span-7">
-          <h2>Bottom Line</h2>
-          <p>
-            Start with a <strong>parameter-calibrated simulator, followed by a small residual
-            SimGAN</strong>. The biggest risk is not that SimGAN is a bad idea. The bigger risk is
-            that <code>simulate_v3.py</code> gives the discriminator easy shortcuts before the GAN has
-            a chance to learn anything useful.
-          </p>
-          <p>
-            The clearest example is lens position. In the current v3 code, both the lens mass and
-            lens light are placed at <code>(0, 0)</code>, so simulated lenses are almost always
-            centered. If real JWST cutouts are not centered in the same way, the discriminator can
-            win by asking a very boring question: <em>is the main lens exactly in the middle?</em>
-            That is a simulator-parameter problem, not an image-texture problem.
-          </p>
-          <p>
-            The new adversarial question should therefore be two-stage:
-            <em>are the lens/source/crop parameters realistic, and after rendering, do the local
-            multi-band image patches look like JWST data without damaging the arcs?</em>
-          </p>
-        </div>
-        <div class="span-5">
-          <div class="note good">
-            <div class="callout-title">Recommended first run</div>
-            <p>
-              Add and save sampled simulator parameters first: <code>lens_center_x</code>,
-              <code>lens_center_y</code>, <code>source_center_x</code>, <code>source_center_y</code>,
-              crop offset, shear, ellipticity, and arc/lens flux ratio. Then train a 4-band
-              residual SimGAN as a refinement layer.
-            </p>
-            <div class="pill-row">
-              <span class="tag">parameter audit</span>
-              <span class="tag">lens offsets</span>
-              <span class="tag">crop offsets</span>
-              <span class="tag">4 channels</span>
-              <span class="tag">residual G</span>
-              <span class="tag">PatchGAN D</span>
-              <span class="tag">arc mask loss</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+<section id="what-changed">
+  <h2>What changed since the old proposals</h2>
+  <table>
+    <tr><th>Old assumption (v3 era)</th><th>Reality now (v8/v9, merged 2026-06-09)</th></tr>
+    <tr><td>The simulator renders a synthetic lens galaxy and synthetic background; a GAN must fix their textures.</td><td>The lens galaxy, neighbors, background and noise are <strong>one untouched real JWST cutout</strong>. There are no synthetic textures left to fix except the arcs.</td></tr>
+    <tr><td>The "centered lens" shortcut must be patched with jittering before any GAN training.</td><td>Moot. The scene's galaxy is real and sits wherever it sits. (A subtler version survives: the <em>mass model</em> is pinned to (0,0) — see <a href="#tells">tells</a>.)</td></tr>
+    <tr><td>A refiner SimGAN is novel here and worth proposing.</td><td>Nate already built one (<code>train_simgan.py</code>, v5). Proposing it again is redundant; learning from it is not — see the postmortem.</td></tr>
+    <tr><td>Goal: refined images for downstream classifier training.</td><td>Goal (set 2026-05-26): <strong>diagnostic feedback</strong>. We want to tell Nate <em>where and why</em> his sims differ from real data, with evidence.</td></tr>
+    <tr><td>Sim datasets can be made arbitrarily large.</td><td>The v8 scene pool has <strong>46 scenes</strong> and <code>simulate_v8.py</code> caps at <code>--n 92</code>. Dataset size is the binding constraint (see <a href="#scene-bottleneck">bottleneck</a>).</td></tr>
+  </table>
+</section>
 
-    <section id="simulator">
-      <h2>What the Current v3 Simulator Already Does Well</h2>
-      <div class="grid">
-        <div class="span-4 card">
-          <h3>It is multi-band</h3>
-          <p>
-            The current pipeline renders <code>F115W</code>, <code>F150W</code>, <code>F277W</code>,
-            and <code>F444W</code> on a common 0.03 arcsec/pixel grid. This matters because JWST
-            realism is not only morphology; it is also color, dropout behavior, and lens-source
-            contrast across bands.
-          </p>
-        </div>
-        <div class="span-4 card">
-          <h3>It uses real survey structure</h3>
-          <p>
-            <code>prep_mosaic.py</code> extracts spatially matched COSMOS-Web backgrounds and empirical
-            PSFs. <code>prep_sources.py</code> and <code>prep_lenses.py</code> can replace smooth Sersic
-            profiles with real galaxy stamps. A GAN should not spend its capacity relearning what
-            this preprocessing already gives us.
-          </p>
-        </div>
-        <div class="span-4 card">
-          <h3>It has physics labels</h3>
-          <p>
-            <code>simulate_v3.py</code> saves labels and parameters such as <code>lensed.npy</code>,
-            <code>theta_Es.npy</code>, <code>z_lens.npy</code>, <code>z_source.npy</code>, and
-            <code>masses.npy</code>. More importantly, it saves <code>sources_*.npy</code>, which can
-            act like a segmentation map for the lensed arcs.
-          </p>
-        </div>
-      </div>
+<section id="simgan-postmortem">
+  <h2>Nate's SimGAN: what it was, and what to take from it</h2>
+  <p>Facts, from reading <code>train_simgan.py</code> and <code>prep_gan_data.py</code>:</p>
+  <ul>
+    <li><strong>Architecture:</strong> ResNet refiner (~3.3M parameters, InstanceNorm, input + learned perturbation) against a 70&times;70 PatchGAN discriminator (~2.8M parameters).</li>
+    <li><strong>Loss:</strong> LSGAN (least-squares) + an L1 "self-regularization" term tying the refined image to the original, with a Gaussian-blur variant for structural preservation.</li>
+    <li><strong>Data:</strong> 128&times;128 <em>isolated-galaxy</em> crops — center crops of sim galaxy-only images vs. brightest-galaxy crops cut from real background patches with local background subtracted. A deliberate design so the discriminator judged galaxy morphology, not background or brightness.</li>
+  </ul>
+  <h3>Why not continue down this road</h3>
+  <ol>
+    <li><strong>The problem it attacked no longer exists.</strong> It refined <em>synthetic lens-galaxy morphology</em> (the v4-era weakness). v8 made the lens galaxy real by construction. Refining real pixels can only corrupt them.</li>
+    <li><strong>A refiner's output is the wrong deliverable.</strong> A refined image silently papers over simulator flaws; it cannot tell Nate what was wrong. A discriminator that is <em>read out</em> (heatmaps, ablations, correlations) produces the feedback itself.</li>
+    <li><strong>Whole-image refinement is mismatched to v8</strong>, where the only simulated pixels are arcs. If a generator ever returns to the plan, it must be masked to the arc footprint (<code>arcs_{band}.npy</code> is a perfect mask) — see <a href="#architecture">Stage 3</a>.</li>
+  </ol>
+  <div class="callout callout-physics">
+    <div class="callout-icon">&#9851;&#65039;</div>
+    <div class="callout-body">
+      <h5>What to salvage</h5>
+      <p>His PatchGAN discriminator is a sound skeleton — keep the patch-output idea, swap LSGAN for hinge loss + spectral norm (more stable, standard in modern GANs). His data-design instinct — <em>make both classes identical except for the thing under test</em> — is exactly the principle that drives the dataset options below. And his isolated-crop preprocessing is reusable for Option E.</p>
+    </div>
+  </div>
+</section>
 
-      <div class="flow" aria-label="v3 simulator flow">
-        <div class="node">COWLS-calibrated lens/source parameters</div>
-        <div class="arrow">to</div>
-        <div class="node">lenstronomy SIE + shear rendering</div>
-        <div class="arrow">to</div>
-        <div class="node">4-band image + source-only arc maps</div>
-      </div>
+<section id="central-question">
+  <h2>The central question: what "real" data are you comparing against?</h2>
+  <p>This is the part to think hardest about, so here it is from first principles.</p>
+  <p>A discriminator learns <em>any</em> systematic difference between its two input piles. It has no idea which differences you care about. Your job in dataset design is to make sure the <strong>only</strong> systematic difference between pile A (sim) and pile B (real) is the thing you want tested — the realism of the simulated arcs.</p>
+  <p>Two v8 facts make this tricky:</p>
+  <ul>
+    <li><strong>Fact 1: v8 non-lensed images are bit-identical to real data</strong> (the scene cutout with nothing added). "Sim vs real" is meaningless for them — they <em>are</em> real. Only lensed images contain simulated pixels.</li>
+    <li><strong>Fact 2: real lenses are astronomically rare.</strong> A random COSMOS-Web cutout essentially never contains a strong lens. So if pile A = lensed sims and pile B = random real cutouts, the discriminator wins by answering "are there arcs?" — it becomes a <em>lens detector</em>, scores ~100%, and tells you precisely nothing about whether Nate's arcs are realistic.</li>
+  </ul>
+  <div class="callout callout-danger">
+    <div class="callout-icon">&#10060;</div>
+    <div class="callout-body">
+      <h5>The confound, in one sentence</h5>
+      <p>In v8, "simulated" and "contains arcs" are perfectly correlated — so any sim-vs-real comparison where the real pile lacks arcs measures arc <em>presence</em>, not arc <em>realism</em>. Every option below is a different strategy for breaking that correlation.</p>
+    </div>
+  </div>
+</section>
 
-      <div class="note">
-        <div class="callout-title">Key implication for ML</div>
-        <p>
-          The GAN should be split into two jobs. First, use a parameter-calibration step so the
-          simulator draws realistic lens positions, source positions, crop offsets, brightness
-          ratios, and shapes. Second, use a residual SimGAN as a <strong>domain-adaptation
-          layer</strong> for observational details like noise, PSF texture, and small color
-          mismatches.
-        </p>
-      </div>
-    </section>
+<section id="options">
+  <h2>Data options, in detail</h2>
 
-    <section id="parameter-calibration">
-      <h2>The Parameter Problem</h2>
-      <div class="grid">
-        <div class="span-7">
-          <p>
-            A GAN has two neural networks. The <strong>generator</strong> tries to produce images that
-            look real. The <strong>discriminator</strong> tries to tell real images from generated
-            images. Training works only if the discriminator has to learn meaningful differences.
-          </p>
-          <p>
-            A <strong>shortcut</strong> is an easy rule that solves the training game without learning
-            the science. For example, if every simulated lens is centered but real cutouts have
-            galaxies all over the stamp, then the discriminator can ignore arcs, colors, redshifts,
-            and lensing morphology. It can simply look for a centered bright galaxy.
-          </p>
-          <p>
-            This is why an image-only SimGAN is not enough. A residual refiner can change texture and
-            small pixel-level style, but it is deliberately discouraged from moving the lens or arcs.
-            So if the simulator places the lens in the wrong part of the image, the refiner is
-            designed not to fix that.
-          </p>
-        </div>
-        <div class="span-5 note warn">
-          <div class="callout-title">Beginner translation</div>
-          <p>
-            Imagine fake product photos always place the object exactly in the center, while real
-            photos are cropped naturally. A model can learn "center means fake" instead of learning
-            what the object looks like. Your lens simulation has the same kind of risk.
-          </p>
-        </div>
-      </div>
+  <h3>Option A — Lensed sims vs. random real cutouts &nbsp;<span class="rec avoid">SMOKE TEST ONLY</span></h3>
+  <table>
+    <tr><th>Sim pile</th><td><code>output/v8/images_*</code> where <code>lensed == 1</code></td></tr>
+    <tr><th>Real pile</th><td>Random 630&times;630 (or 224) 4-band cutouts from <code>raw_data/1727_mosaic/</code> — the script <code>gan/data/prep_real_targets.py</code> already does this</td></tr>
+    <tr><th>Pros</th><td>Unlimited real data (the mosaics are on NERSC disk); zero new code.</td></tr>
+    <tr><th>Cons</th><td>The fatal confound above: D learns "arcs &rArr; fake." Also scene cutouts are <em>centered on bright ellipticals</em> while random cutouts are not — a second free giveaway.</td></tr>
+    <tr><th>Use it for</th><td>A pipeline smoke test only: if D <em>fails</em> to reach ~100% here, something is broken in your loading/normalization. Never report its accuracy as a realism result.</td></tr>
+  </table>
 
-      <table style="margin-top: 16px;">
-        <thead>
-          <tr>
-            <th>Parameter</th>
-            <th>Current v3 behavior</th>
-            <th>Why it matters for a GAN</th>
-            <th>Recommended change</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Lens mass center</td>
-            <td><code>center_x=0</code>, <code>center_y=0</code></td>
-            <td>Defines where the lensing deflection happens. If always centered, D gets a free clue.</td>
-            <td>Sample <code>lens_center_x/y</code> from a realistic crop-offset distribution.</td>
-          </tr>
-          <tr>
-            <td>Lens light center</td>
-            <td><code>center_x=0</code>, <code>center_y=0</code></td>
-            <td>The bright galaxy appears in the same place every time.</td>
-            <td>Tie it to the mass center, with a tiny optional mass-light offset.</td>
-          </tr>
-          <tr>
-            <td>Source center</td>
-            <td>Sampled around the fixed origin</td>
-            <td>The source position is physically relative to the lens, not to the image stamp.</td>
-            <td>Sample source offset relative to <code>lens_center_x/y</code>.</td>
-          </tr>
-          <tr>
-            <td>Image crop</td>
-            <td>Implicitly centered on the lens system</td>
-            <td>Real cutouts may be centered on candidates, catalog objects, or arbitrary sky positions.</td>
-            <td>Match the real-data crop rule, or randomize crop offsets and save them.</td>
-          </tr>
-          <tr>
-            <td>Metadata</td>
-            <td>Saves redshifts, mass, <code>theta_E</code>, and label</td>
-            <td>A parameter-aware model cannot learn/check parameters that are not saved.</td>
-            <td>Save centers, shear, ellipticity, flux ratios, stamp IDs, and crop offsets.</td>
-          </tr>
-        </tbody>
-      </table>
+  <h3>Option B — Lensed sims vs. real COWLS lens cutouts &nbsp;<span class="rec">PRIMARY</span></h3>
+  <table>
+    <tr><th>Sim pile</th><td>v8 (and separately v9) lensed images</td></tr>
+    <tr><th>Real pile</th><td>4-band cutouts extracted from the same DR0.5 mosaics at the coordinates of real lens candidates. <code>cowls_catalogue.csv</code> (in this repo) has 440 systems with <code>ra</code>, <code>dec</code>, Einstein radius, and per-band lens <em>and source</em> magnitudes — everything needed. Requires one new script (<code>prep_cowls_cutouts.py</code>: WCS &rarr; pixel positions &rarr; cutouts; ~an afternoon, modeled on <code>prep_scenes_v8.py</code>).</td></tr>
+    <tr><th>Why it's right</th><td>Both piles now contain a central elliptical <em>with arcs around it</em>, drawn from the same instrument, depth, and reduction. The arc-presence shortcut is gone; the discriminator must judge arc morphology, color, noise texture, and lens-arc consistency — exactly Nate's simulated content.</td></tr>
+    <tr><th>Cons &amp; mitigations</th><td>Only ~440 real systems, of mixed confidence — small for ML. Mitigate with: (1) a <em>small</em> D and patch-level training (each 630px image yields hundreds of receptive-field patches); (2) dihedral augmentation (8&times;); (3) k-fold cross-validation instead of a single split; (4) match or stratify theta_E between piles using the catalogue's <code>einstein_radius</code> column so D can't key on arc-radius distribution differences; (5) optionally restrict to the higher-confidence subset and treat the rest as a validation pool.</td></tr>
+    <tr><th>What a win means</th><td>If D separates the piles, its heatmaps point at <em>what</em> looks wrong (arc edges? colors? noise?), and its score correlations against <code>theta_Es.npy</code>, <code>z_source.npy</code>, scene ID, etc. point at <em>which regime</em> is wrong. That is the feedback report.</td></tr>
+  </table>
 
-      <div class="note good" style="margin-top: 16px;">
-        <div class="callout-title">Important nuance</div>
-        <p>
-          Centering is not automatically wrong. If the real target set is also cropped around known
-          lens candidates, then centered simulations can be appropriate. The key rule is distribution
-          matching: simulated cutouts and real cutouts should be centered, offset, masked, and scaled
-          in the same way.
-        </p>
-      </div>
-    </section>
+  <h3>Option C — Non-lensed sims vs. scene-style real cutouts &nbsp;<span class="rec risk">CONTROL / UNIT TEST</span></h3>
+  <table>
+    <tr><th>Sim pile</th><td>v8 non-lensed images (= the 46 scenes, untouched)</td></tr>
+    <tr><th>Real pile</th><td>A <em>held-out</em> set of cutouts selected by the same rules as the scene pool (elliptical-centered, brightness + compactness filters) but at different sky positions</td></tr>
+    <tr><th>The point</th><td>By construction both piles are 100% real JWST data, so a correct pipeline yields D accuracy &asymp; 50% (coin-flip). If D scores above chance here, your <em>preprocessing</em> differs between piles (normalization, crop logic, dtype, background handling) — a bug in your code, not Nate's. This is a free unit test; run it before believing any other number.</td></tr>
+    <tr><th>Cost</th><td>Reuses <code>prep_scenes_v8.py</code> logic with a position exclusion list. Cheap.</td></tr>
+  </table>
 
-    <section id="old-gan">
-      <h2>What Went Wrong in the Older GAN</h2>
-      <div class="grid">
-        <div class="span-6">
-          <figure>
-            <img src="../lenssim/gan/plots/losses_epoch50.png" alt="Older GAN loss curves showing discriminator loss collapsing near zero">
-            <figcaption>
-              Older <code>lenssim/gan</code> loss plot. The discriminator loss collapses close to zero,
-              while the refiner adversarial loss climbs. That means D is winning too hard.
-            </figcaption>
-          </figure>
-        </div>
-        <div class="span-6">
-          <figure>
-            <img src="../lenssim/gan/plots/samples_epoch50.png" alt="Older GAN sample grid with simulated, refined, and real JWST rows">
-            <figcaption>
-              Older sample grid. Refined images are mostly still simulated images, with some artifacts.
-              The target row is a visibly different distribution.
-            </figcaption>
-          </figure>
-        </div>
-      </div>
+  <h3>Option D — Paired injection test: same scene, with vs. without arcs &nbsp;<span class="rec risk">ARTIFACT PROBE</span></h3>
+  <table>
+    <tr><th>Sim pile</th><td>Lensed images (scene + injected arcs)</td></tr>
+    <tr><th>Real pile</th><td>The <em>same scenes</em>, no injection (<code>galaxies_{band}.npy</code> gives you exact pairs)</td></tr>
+    <tr><th>The point</th><td>Backgrounds are pixel-identical across piles, so the only learnable signal is the injection itself: the arc pixels and their seam. D <em>will</em> win (arcs are present vs. absent) — the value is not the accuracy but the <strong>heatmaps and saliency</strong>: if D's attention falls on the arc <em>boundary</em> or on noise texture rather than arc shape, that localizes injection artifacts (Poisson-only noise, PSF mismatch, flux calibration) with surgical precision.</td></tr>
+    <tr><th>Cons</th><td>Cannot say whether arcs resemble <em>real</em> arcs (no real lens ever enters); it tests internal consistency only. Pair it with Option B, never instead of.</td></tr>
+  </table>
 
-      <div class="grid" style="margin-top: 16px;">
-        <div class="span-4 note danger">
-          <div class="callout-title">Failure mode 1: easy discriminator shortcuts</div>
-          <p>
-            The old discriminator returned one scalar for the whole 125x125 image. It could win by
-            spotting global differences: centered lens galaxy versus off-center field galaxy, smooth
-            lens light versus clumpy galaxy, or normalization artifacts.
-          </p>
-        </div>
-        <div class="span-4 note danger">
-          <div class="callout-title">Failure mode 2: target distribution mismatch</div>
-          <p>
-            A generic JWST or VELA galaxy cutout is not the same distribution as a real strong-lens
-            cutout. If the real set mostly contains ordinary galaxies, the discriminator can learn
-            that arcs and massive central lenses are fake.
-          </p>
-        </div>
-        <div class="span-4 note danger">
-          <div class="callout-title">Failure mode 3: per-image min-max scaling</div>
-          <p>
-            Normalizing every stamp independently to [0, 1] erases real flux, sky RMS, color, and
-            surface-brightness information. It also gives the refiner no consistent physical scale to
-            learn.
-          </p>
-        </div>
-      </div>
+  <h3>Option E — Arc-centered crops: sim arcs vs. real arcs &nbsp;<span class="rec later">REFINEMENT OF B</span></h3>
+  <table>
+    <tr><th>Sim pile</th><td>Small crops (e.g. 96&ndash;128 px) centered on simulated arc segments, located via <code>arcs_{band}.npy</code></td></tr>
+    <tr><th>Real pile</th><td>Crops at the arc radius (from catalogue <code>einstein_radius</code>) around real COWLS lenses</td></tr>
+    <tr><th>The point</th><td>Concentrates all model capacity on the only simulated pixels; largely removes the 46-scene memorization risk because crops mostly exclude scene centers; multiplies the effective sample count (several crops per system).</td></tr>
+    <tr><th>Cons</th><td>Real arc positions are approximate (annulus, not exact mask); local brightness must be matched so D can't key on flux level alone. Adopt it if Option B overfits despite mitigations.</td></tr>
+  </table>
 
-      <div class="note warn" style="margin-top: 16px;">
-        <div class="callout-title">Updated diagnosis</div>
-        <p>
-          The old GAN architecture was not the only issue. The simulator and real-data selection must
-          also agree on basic parameters such as where the target galaxy sits in the cutout. A local
-          PatchGAN makes the shortcut harder, but it does not remove the shortcut if every simulated
-          system is generated with the same global geometry.
-        </p>
-      </div>
+  <h3>Decision summary</h3>
+  <table>
+    <tr><th>Option</th><th>Question it answers</th><th>Role</th></tr>
+    <tr><td><strong>B</strong> — sims vs. COWLS lenses</td><td>"Do Nate's arcs look like real arcs?"</td><td><strong>Primary experiment; the feedback comes from here</strong></td></tr>
+    <tr><td><strong>C</strong> — real vs. real null test</td><td>"Is my own data pipeline unbiased?"</td><td>Mandatory control, run first</td></tr>
+    <tr><td><strong>D</strong> — paired injection</td><td>"Where exactly are the injection artifacts?"</td><td>Artifact localization, second</td></tr>
+    <tr><td><strong>A</strong> — sims vs. random sky</td><td>"Does my code run?"</td><td>Smoke test only</td></tr>
+    <tr><td><strong>E</strong> — arc crops</td><td>Same as B, zoomed in</td><td>Fallback if B overfits</td></tr>
+  </table>
+</section>
 
-      <table style="margin-top: 16px;">
-        <thead>
-          <tr>
-            <th>Old choice</th>
-            <th>Why it hurt</th>
-            <th>Replacement in the proposals below</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Single-band F115W training</td>
-            <td>JWST realism has strong multi-band color and dropout structure.</td>
-            <td>Train with all four v3 channels, or at least RGB plus the blue short-wave average.</td>
-          </tr>
-          <tr>
-            <td>Scalar full-image discriminator</td>
-            <td>D can classify using trivial global cues and starves G of useful gradient.</td>
-            <td>Use local PatchGAN / crop discriminators, optionally with a weak global head.</td>
-          </tr>
-          <tr>
-            <td>BCE + sigmoid GAN loss</td>
-            <td>Once D is confident, gradients saturate.</td>
-            <td>Use WGAN-GP, hinge loss, or least-squares GAN. Add spectral norm or gradient penalty.</td>
-          </tr>
-          <tr>
-            <td>Refiner output forced through sigmoid</td>
-            <td>It changes the image scale and can create edge artifacts.</td>
-            <td>Use <code>x_ref = x_sim + alpha * tanh(delta)</code> with reflection padding.</td>
-          </tr>
-          <tr>
-            <td>Only generic pixel preservation</td>
-            <td>The loss does not know which pixels carry the lensing signal.</td>
-            <td>Use <code>sources_*.npy</code> to weight preservation on arcs and arc colors.</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+<section id="scene-bottleneck">
+  <h2>The 46-scene bottleneck &nbsp;<span class="rec risk">TOP FEEDBACK ITEM</span></h2>
+  <p>The v8 scene pool contains <strong>46 cutouts</strong> (78 candidates, minus star/brightness rejects), and because non-lensed samples must use unique scenes, <code>simulate_v8.py</code> cannot generate more than <strong>92 images per run</strong> (it errors above that). Three consequences:</p>
+  <ul>
+    <li><strong>Any network will memorize all 46 backgrounds.</strong> Always split train/test <em>by scene ID</em>, never randomly — otherwise the same real background appears on both sides and your accuracy is fiction.</li>
+    <li><strong>Lensed-only datasets can be larger</strong> (lensed sampling reuses scenes), but the background variety is still 46 — D can learn "one of the 46 backgrounds &rArr; sim". Option E mitigates; growing the pool cures.</li>
+    <li><strong>This is the single highest-value feedback for Nate</strong>, deliverable today without training anything: the scene pool needs to grow by 1&ndash;2 orders of magnitude (scan more mosaic positions, relax the isolation cut, or lean on the external catalogs he already pulled into <code>v9_consistent/</code> — the JADES DR5 ellipticals and <code>lens_scene_galaxies.csv</code> with ~1000 entries show he is aware).</li>
+  </ul>
+</section>
 
-    <section id="architectures">
-      <h2>Architecture Proposals</h2>
+<section id="architecture">
+  <h2>Recommended build, in order</h2>
+  <div class="flow">
+    <div class="node">Stage 0<br>PCA + logistic baseline</div>
+    <div class="arrow">&rarr;</div>
+    <div class="node">Stage 1<br>D-only PatchGAN classifier</div>
+    <div class="arrow">&rarr;</div>
+    <div class="node">Stage 2<br>Interpretability readout</div>
+    <div class="arrow">&rarr;</div>
+    <div class="node">Stage 3 (optional)<br>arc-masked refiner</div>
+  </div>
 
-      <article class="card" style="margin-bottom: 16px;">
-        <span class="rec">Start here</span>
-        <h3>A. Parameter-Calibrated Simulator + Residual SimGAN</h3>
-        <p>
-          This is the architecture I would now recommend first. It keeps the simulator in charge of
-          the physics, but it stops treating simulator parameters as fixed background assumptions.
-          The generator is not only an image refiner; it also proposes or adjusts the parameters that
-          control where the lens appears, where the source sits relative to the lens, how bright the
-          arc is, and how the cutout is cropped.
-        </p>
-        <p>
-          An <strong>MLP</strong> is just a small neural network for numbers instead of images. Here,
-          it would output a short list of simulator settings. A <strong>PatchGAN</strong> is a
-          discriminator that judges many small image patches instead of giving one score for the whole
-          image; this makes it focus more on local JWST texture and less on one global clue.
-        </p>
-        <div class="grid">
-          <div class="span-6">
-            <table>
-              <tbody>
-                <tr>
-                  <th>Parameter generator</th>
-                  <td>Small MLP that outputs lens center, source offset, crop offset, shear, ellipticity, and flux-ratio adjustments.</td>
-                </tr>
-                <tr>
-                  <th>Physics renderer</th>
-                  <td><code>simulate_v3.py</code> / lenstronomy renders the actual lensing image from those parameters.</td>
-                </tr>
-                <tr>
-                  <th>Image refiner</th>
-                  <td>Small residual SimGAN changes only observational style after rendering.</td>
-                </tr>
-                <tr>
-                  <th>Discriminator</th>
-                  <td>PatchGAN plus a weak global head used as a shortcut detector.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="span-6">
-            <pre><code>p = P(z_noise, optional_context)
-x_sim, arc_map = simulate_v3(p)
-x_ref = x_sim + alpha * tanh(R(x_sim, arc_map, p))
+  <h3>Stage 0 — Classical baseline first (no neural nets)</h3>
+  <p>Run the existing <code>gan/baselines/pca.py</code> (PCA &rarr; logistic regression) on the Option B piles. The cross-validated accuracy is the number any neural network must beat; if PCA alone scores very high, inspect its top components — the answer may be linear and cheap. This mirrors Stage 0 of <a href="gan_plan.md" style="color:var(--accent);">gan_plan.md</a>.</p>
 
-D asks:
-  1. do local patches look like JWST?
-  2. do global/crop statistics look real?</code></pre>
-            <p style="margin-top: 12px;">
-              <code>p</code> means "parameters." For this project, examples are
-              <code>lens_center_x</code>, <code>lens_center_y</code>, <code>source_offset</code>,
-              <code>theta_E</code>, shear, ellipticity, and arc/lens flux ratio.
-            </p>
-          </div>
-        </div>
-        <div class="note good" style="margin-top: 14px;">
-          <div class="callout-title">Why this matches your concern</div>
-          <p>
-            If the discriminator is winning because all simulated lenses are centered, the generator
-            must be allowed to change centering. A pure residual SimGAN is intentionally too weak to
-            move the lens. This architecture gives the model a physics-aware knob for geometry and a
-            separate image-refinement knob for JWST style.
-          </p>
-        </div>
-      </article>
+  <h3>Stage 1 — The discriminator (the deliverable)</h3>
+  <table>
+    <tr><th>Input</th><td>4 channels (F115W/F150W/F277W/F444W stacked), so color ratios are learnable. Random 224&times;224 crops of the 630px images (data augmentation + matches the PatchGAN's working scale); for Option E, 96&ndash;128px arc crops.</td></tr>
+    <tr><th>Normalization</th><td>Fixed per-band <code>arcsinh</code> stretch with sky statistics computed once from the <em>real</em> pile (<code>gan/data/normalize.py</code>). Never per-image min-max — it destroys the flux and color information you are testing.</td></tr>
+    <tr><th>Body</th><td>PatchGAN: 4&ndash;5 stride-2 conv blocks (base 64 channels), LeakyReLU(0.2), <strong>spectral normalization</strong> on every conv. Output is a logit <em>map</em> (one score per ~70px patch), not a single number — this is what makes heatmaps free.</td></tr>
+    <tr><th>Loss</th><td>Hinge loss on raw logits (no sigmoid). More stable than BCE or Nate's LSGAN choice.</td></tr>
+    <tr><th>Size</th><td>Keep it small (&le; ~3M params). With ~440 real systems, capacity is the enemy; patch-level training and augmentation are the friends.</td></tr>
+    <tr><th>Protocol</th><td>Split by scene ID (sims) and by system (reals); k-fold CV; report mean&plusmn;std accuracy vs. the Stage 0 baseline. Run Option C's null test through the identical code path first.</td></tr>
+  </table>
 
-      <article class="card" style="margin-bottom: 16px;">
-        <span class="rec risk">Use after parameter audit</span>
-        <h3>B. Multi-Band Residual SimGAN with Patch Discriminator</h3>
-        <p>
-          This is the direct successor to the old SimGAN idea, but adapted to the v3 simulator. The
-          generator is a small residual image-to-image network. It sees a simulated 4-band image and
-          outputs a small 4-band correction. The discriminator judges local patches rather than one
-          whole-image score.
-          This is still useful, but only after the simulator's parameter distribution is close to the
-          real cutout distribution.
-        </p>
-        <div class="grid">
-          <div class="span-6">
-            <table>
-              <tbody>
-                <tr>
-                  <th>Input</th>
-                  <td><code>x_sim</code>: <code>B x 4 x 125 x 125</code>, fixed physical/asinh scaling.</td>
-                </tr>
-                <tr>
-                  <th>Generator</th>
-                  <td>Reflection pad -> conv(4, 64) -> 4 residual blocks -> conv(64, 4) -> tanh residual.</td>
-                </tr>
-                <tr>
-                  <th>Output</th>
-                  <td><code>x_ref = x_sim + alpha * tanh(G(x_sim, arc_mask))</code>, with <code>alpha</code> small.</td>
-                </tr>
-                <tr>
-                  <th>Discriminator</th>
-                  <td>70x70-ish PatchGAN over 4-band patches, no final sigmoid if using hinge or WGAN-GP.</td>
-                </tr>
-                <tr>
-                  <th>Real data</th>
-                  <td>Prefer real lens candidates or central-galaxy-matched JWST cutouts in the same four bands.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="span-6">
-            <pre><code>L_G =
-    L_adv_patch
-  + lambda_img   * SmoothL1(x_ref, x_sim)
-  + lambda_arc   * SmoothL1(M_arc * x_ref, M_arc * x_sim)
-  + lambda_color * color_ratio_loss(x_ref, x_sim, M_arc)
-  + lambda_flux  * aperture_flux_loss(x_ref, x_sim)</code></pre>
-            <p style="margin-top: 12px;">
-              The arc mask <code>M_arc</code> comes from <code>sources_*.npy</code>. This is the crucial
-              physics constraint: the network may make the image look more JWST-like, but it pays a
-              large penalty for moving, dimming, or recoloring the arc.
-            </p>
-          </div>
-        </div>
-        <div class="note good" style="margin-top: 14px;">
-          <div class="callout-title">Why this should work better than the old GAN</div>
-          <p>
-            Local D focuses on noise texture, PSF wings, small galaxy substructure, and color
-            covariance. Residual G starts near the identity map. Arc-weighted preservation prevents
-            the network from solving the game by making lens images look like ordinary galaxies.
-            But this does not solve a global parameter mismatch such as every simulated lens being
-            centered; that has to be handled before or alongside this refiner.
-          </p>
-        </div>
-      </article>
+  <h3>Stage 2 — Make the discriminator talk</h3>
+  <ul>
+    <li><strong>Patch heatmaps</strong> (free): upsample the logit map over the image. Regions that consistently light up on sims are the localized sim-real disagreements.</li>
+    <li><strong>Per-band ablation:</strong> zero one band at a time, measure the accuracy drop &rarr; which band carries the tell &rarr; SED vs. morphology diagnosis.</li>
+    <li><strong>Parameter correlations:</strong> D score vs. <code>theta_E</code>, <code>z_source</code>, scene ID, VELA stamp ID. A strong correlation converts "D wins" into "the simulator is wrong <em>here</em>." For v9, add D score vs. lens-brightness&ndash;theta_E consistency.</li>
+    <li><strong>v8 vs. v9 shootout:</strong> identical training on both outputs. If v9's Faber&ndash;Jackson consistency closed a real visual gap, v9 should be measurably harder to discriminate — a headline feedback number.</li>
+  </ul>
 
-      <article class="card" style="margin-bottom: 16px;">
-        <span class="rec risk">Very safe first diagnostic</span>
-        <h3>C. Nuisance-Only Residual GAN</h3>
-        <p>
-          This version deliberately prevents the GAN from changing the astrophysical scene. It can
-          only learn detector/background/PSF-like residuals. Use this as the first NERSC sanity
-          check if you are worried about a full-image GAN destroying arcs.
-        </p>
-        <div class="grid">
-          <div class="span-5">
-            <h3>Architecture</h3>
-            <ul>
-              <li><code>G_noise</code>: 3 to 5 convolutional layers, 32 or 64 channels, residual output.</li>
-              <li><code>D_highpass</code>: sees random 32x32 or 48x48 high-pass-filtered patches.</li>
-              <li>Optional Fourier head: match the local noise power spectrum per band.</li>
-              <li>Mask out arc and bright lens cores from the adversarial patches.</li>
-            </ul>
-          </div>
-          <div class="span-7">
-            <h3>Training target</h3>
-            <p>
-              Use real JWST sky/galaxy cutouts for detector texture, but do not ask D to judge the
-              entire semantic image. D should see only nuisance residuals: local sky covariance,
-              drizzle-correlated noise, faint unresolved background, and PSF-ish texture.
-            </p>
-            <pre><code>x_ref = x_sim + G_noise(highpass_context)
-D sees highpass(x_ref) versus highpass(real_jwst)</code></pre>
-          </div>
-        </div>
-        <div class="note warn" style="margin-top: 14px;">
-          <div class="callout-title">What it will not fix</div>
-          <p>
-            It will not learn large-scale lens-galaxy morphology or realistic source populations.
-            That is fine. Its job is to prove the data loader, normalization, and GAN loss are
-            stable before you allow the generator to touch visible structure.
-          </p>
-        </div>
-      </article>
+  <h3>Stage 3 — Optional, later: an arc-masked refiner</h3>
+  <p><span class="rec later">ONLY IF NEEDED</span>&nbsp; A generator earns its place only if D plateaus and you want to force it to keep finding <em>new</em> differences. If so: a small residual refiner whose output is multiplied by the arc mask (dilated <code>arcs_{band}.npy</code> footprint) so it is <em>architecturally incapable</em> of touching real pixels — the key contrast with Nate's whole-image refiner. Hinge GAN + L1 preservation inside the mask. Treat its corrections as hypotheses about what's wrong with the arcs, not as products.</p>
+</section>
 
-      <article class="card" style="margin-bottom: 16px;">
-        <span class="rec later">Use after B is stable</span>
-        <h3>D. Masked CycleGAN-Lite</h3>
-        <p>
-          CycleGAN is useful when you have unpaired data: a pile of simulations and a pile of real
-          JWST cutouts, but no one-to-one pairs. It learns two maps, simulation-to-real and
-          real-to-simulation, and forces a round trip to reconstruct the input.
-        </p>
-        <div class="flow" aria-label="CycleGAN-lite flow">
-          <div class="node">Sim image x</div>
-          <div class="arrow">to</div>
-          <div class="node">G: sim to real style</div>
-          <div class="arrow">to</div>
-          <div class="node">F(G(x)) should recover x</div>
-        </div>
-        <div class="grid">
-          <div class="span-6">
-            <h3>Keep it light</h3>
-            <ul>
-              <li>Use the same residual image refiner as Proposal B for <code>G</code>.</li>
-              <li>Use an even smaller residual generator for <code>F</code>.</li>
-              <li>Use PatchGAN discriminators <code>D_real</code> and <code>D_sim</code>.</li>
-              <li>Strong identity loss: real images passed through <code>G</code> should stay real.</li>
-            </ul>
-          </div>
-          <div class="span-6">
-            <pre><code>L =
-    L_adv_real(G, D_real)
-  + L_adv_sim(F, D_sim)
-  + lambda_cycle * |F(G(x_sim)) - x_sim|
-  + lambda_id    * |G(x_real) - x_real|
-  + lambda_arc   * |M_arc * (G(x_sim) - x_sim)|</code></pre>
-          </div>
-        </div>
-        <div class="note warn" style="margin-top: 14px;">
-          <div class="callout-title">Main risk</div>
-          <p>
-            Cycle consistency is a weak physical constraint. The network can sometimes hide
-            information in imperceptible patterns to satisfy the cycle loss. Use this only after the
-            simpler residual SimGAN has taught you what a stable run looks like.
-          </p>
-        </div>
-      </article>
+<section id="tells">
+  <h2>Predicted tells — feedback you can give before training anything</h2>
+  <p>From reading <code>simulate_v8.py</code> (details and line-level context in the <a href="simulate_v8_explainer.html" style="color:var(--accent);">v8 explainer, &sect;5</a>). These are the differences a discriminator is <em>likely</em> to find, ranked by guessed visibility; each is independently verifiable and actionable by Nate now:</p>
+  <ol>
+    <li><strong>Every lens has the same shape:</strong> SIE ellipticity fixed at (0.05, 0.02), shear fixed at (0.02, 0.01) &rarr; all arcs from one nearly-circular mass family. COWLS lenses span a wide ellipticity range.</li>
+    <li><strong>Fixed arc/lens flux ratio (0.25&times; a peak proxy):</strong> real source-to-lens contrast spans orders of magnitude (verifiable directly from the COWLS per-band lens and source magnitudes).</li>
+    <li><strong>Mass pinned to (0,0), light wherever the real galaxy is:</strong> arcs can curve around a point offset from the visible lens.</li>
+    <li><strong>Arc noise is uncorrelated Poisson; mosaic noise is drizzle-correlated:</strong> the noise texture changes exactly at the arc footprint — a seam a patch discriminator can find.</li>
+    <li><strong>Identical arc morphology in all four bands</strong> (VELA stamps per-band normalized, one analytic SED applied): real star-forming sources are clumpier and bluer in the blue bands.</li>
+    <li><strong>theta_E uncorrelated with lens brightness</strong> in v8 (fixed in v9 — which is what makes the v8-vs-v9 shootout interesting).</li>
+  </ol>
+  <p class="muted">If the trained discriminator's heatmaps and correlations land on these, the pipeline works. If it finds something <em>not</em> on this list, that's the discovery worth writing up.</p>
+</section>
 
-      <article class="card" style="margin-bottom: 16px;">
-        <span class="rec later">Good second-generation model</span>
-        <h3>E. Physics-Conditioned Residual GAN</h3>
-        <p>
-          The simulator knows physical parameters that a plain image-to-image GAN ignores. This
-          architecture gives the refiner a small condition vector so it can learn that, for example,
-          high-redshift sources, small Einstein radii, and red lens galaxies should receive different
-          corrections.
-        </p>
-        <div class="grid">
-          <div class="span-6">
-            <h3>Condition vector</h3>
-            <p>
-              Start with <code>[theta_E, z_lens, z_source, lens_center_x, lens_center_y,
-              source_offset, arc_lens_ratio, lensed]</code>, normalized to roughly order one. Feed it
-              through a tiny MLP and use FiLM-style scale/shift inside residual blocks.
-            </p>
-            <pre><code>h = ResBlock(h)
-gamma, beta = MLP(params)
-h = gamma[:, :, None, None] * h + beta[:, :, None, None]</code></pre>
-          </div>
-          <div class="span-6">
-            <h3>Why it helps</h3>
-            <p>
-              A correction appropriate for a bright, low-z, large-theta_E system may be wrong for a
-              tiny high-z arc. Conditioning gives the model a controlled way to vary its style
-              corrections without inventing new lens geometry.
-            </p>
-            <p>
-              Keep the discriminator mostly unconditioned unless you have real lens labels. Real JWST
-              images will not automatically have <code>theta_E</code> and <code>z_source</code>, so
-              conditioning belongs primarily in the generator.
-            </p>
-          </div>
-        </div>
-      </article>
+<section id="roadmap">
+  <h2>Practical NERSC roadmap</h2>
+  <ol>
+    <li><strong>Rebuild the prep chain</strong> (mosaics are already on disk): <code>prep_mosaic.py</code> &rarr; <code>prep_stamps_v6.py</code> &rarr; <code>prep_lenses_v8.py</code> &rarr; <code>prep_scenes_v8.py</code>; download VELA archives, then <code>prep_vela_v7.py</code>. Slurm templates: <code>gan/slurm/</code>.</li>
+    <li><strong>Generate sims:</strong> <code>simulate_v8.py --n 92</code> (the cap), and the same via <code>v9_consistent/simulate_v9_consistent.py</code>.</li>
+    <li><strong>Write <code>prep_cowls_cutouts.py</code></strong> (Option B reals) and the held-out scene-style cutouts (Option C reals).</li>
+    <li><strong>Run Option C null test</strong> through the full pipeline — proceed only at ~50%.</li>
+    <li><strong>Stage 0 baseline, then Stage 1 D, then Stage 2 readout</strong> on Option B; Option D for artifact localization.</li>
+    <li><strong>Deliver feedback:</strong> the tells list above (verified/refuted), heatmaps, parameter correlations, the v8-vs-v9 number, and the scene-pool recommendation.</li>
+  </ol>
+  <p class="muted">Execution details, PyTorch snippets, loss definitions, and the risk table live in <a href="gan_plan.md" style="color:var(--accent);">gan_plan.md</a> — this document decides <em>what</em> to build and <em>against which data</em>; the plan decides <em>how</em>.</p>
+</section>
 
-      <article class="card">
-        <span class="rec later">Useful if you save more simulator components</span>
-        <h3>F. Paired Simulator-Component GAN</h3>
-        <p>
-          This is a pix2pix-like architecture, but the pairs come from the simulator rather than from
-          real data. Modify v3 to save clean components: lens light, source arcs, background, clean
-          no-background image, and final noisy image. Train a U-Net-like composer on those simulated
-          pairs, then add a weak real-JWST adversarial loss.
-        </p>
-        <table>
-          <thead>
-            <tr>
-              <th>Part</th>
-              <th>Design</th>
-              <th>Purpose</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Generator</td>
-              <td>Small U-Net, input channels = lens-only, source-only, background, masks, parameters.</td>
-              <td>Learns observation/composition while keeping components visible.</td>
-            </tr>
-            <tr>
-              <td>Paired loss</td>
-              <td>L1/Huber to the simulator's final image.</td>
-              <td>Prevents unconstrained GAN behavior.</td>
-            </tr>
-            <tr>
-              <td>Adversarial loss</td>
-              <td>PatchGAN against real JWST patches.</td>
-              <td>Pushes the synthetic observation model toward real data.</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="note" style="margin-top: 14px;">
-          <div class="callout-title">Why this is attractive</div>
-          <p>
-            It uses the simulator's natural decomposition instead of asking a black box to discover
-            it. This is often easier to debug for a physics project because you can inspect which
-            component caused a bad output.
-          </p>
-        </div>
-      </article>
-    </section>
-
-    <section id="data">
-      <h2>Data Recipe for Real JWST Images</h2>
-      <div class="grid">
-        <div class="span-6 note good">
-          <div class="callout-title">Use fixed physical normalization</div>
-          <p>
-            Do not repeat the old per-image min-max normalization. Keep images in a consistent unit
-            system per band, then apply a fixed transform such as:
-          </p>
-          <pre><code>y_band = asinh((image_band - sky_median_band) / (k * sky_sigma_band))</code></pre>
-          <p style="margin-top: 10px;">
-            Save <code>sky_median_band</code>, <code>sky_sigma_band</code>, and <code>k</code>. The
-            inverse transform should be possible for display and flux checks.
-          </p>
-        </div>
-        <div class="span-6 note warn">
-          <div class="callout-title">Match the target distribution to the adversarial question</div>
-          <p>
-            If D sees whole images, real targets should be real lens candidates or at least cutouts
-            matched to a central red galaxy. If D sees only local nuisance residuals, generic real
-            JWST sky patches are acceptable.
-          </p>
-        </div>
-      </div>
-
-      <table style="margin-top: 16px;">
-        <thead>
-          <tr>
-            <th>Step</th>
-            <th>Recommendation</th>
-            <th>Reason</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Band alignment</td>
-            <td>Cut matched 4-band stamps in the same order as v3: F115W, F150W, F277W, F444W.</td>
-            <td>The GAN should learn cross-band covariance, not independent grayscale tricks.</td>
-          </tr>
-          <tr>
-            <td>Stamp selection</td>
-            <td>Reject edges, bad WHT/coverage, NaNs, saturation, and severe artifacts.</td>
-            <td>D will happily learn data-quality shortcuts.</td>
-          </tr>
-          <tr>
-            <td>Cutout centering</td>
-            <td>Use the same crop rule for simulations and real data: centered on candidate, centered on catalog galaxy, or randomized sky crop.</td>
-            <td>If fake and real cutouts use different centering rules, D can win from position alone.</td>
-          </tr>
-          <tr>
-            <td>Simulator parameters</td>
-            <td>Save lens/source centers, crop offsets, shear, ellipticity, flux ratios, and stamp IDs.</td>
-            <td>You cannot debug or condition on parameters that were never saved.</td>
-          </tr>
-          <tr>
-            <td>Real/full-image targets</td>
-            <td>Use lens candidates or central-galaxy-matched cutouts.</td>
-            <td>Otherwise D learns that ordinary galaxies are real and lenses are fake.</td>
-          </tr>
-          <tr>
-            <td>Train/val split</td>
-            <td>Split by mosaic tile or sky region, not by random cutout.</td>
-            <td>Prevents memorizing local background texture.</td>
-          </tr>
-          <tr>
-            <td>Simulator data</td>
-            <td>Stack <code>images_*.npy</code>; build arc masks from <code>sources_*.npy</code>.</td>
-            <td>The source-only arrays are the built-in physics-preservation handle.</td>
-          </tr>
-          <tr>
-            <td>Scaling check</td>
-            <td>Plot pixel histograms and per-band flux percentiles before training.</td>
-            <td>Most GAN "mystery failures" start as boring normalization bugs.</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section id="implementation">
-      <h2>Implementation Skeleton</h2>
-      <p>
-        This is intentionally small. The most important details are: first fix or learn the simulator
-        parameters, then use residual output, reflection padding, local discrimination, and
-        arc-weighted preservation for image refinement.
-      </p>
-      <pre><code># tensors
-# parameter-aware simulation step
-p = sample_or_generate_parameters()
-p["lens_center_x"], p["lens_center_y"] = sample_crop_matched_lens_center()
-p["source_center_x"] = p["lens_center_x"] + p["source_offset"] * cos(p["source_angle"])
-p["source_center_y"] = p["lens_center_y"] + p["source_offset"] * sin(p["source_angle"])
-
-x_sim, source_only = simulate_v3_render(p)
-
-# tensors
-x = stack_bands(x_sim["F115W"], x_sim["F150W"], x_sim["F277W"], x_sim["F444W"])
-s = stack_bands(source_only["F115W"], source_only["F150W"], source_only["F277W"], source_only["F444W"])
-
-# simple arc mask, shape B x 1 x H x W
-m_arc = (abs(s).sum(dim=1, keepdim=True) > tau).float()
-
-# generator input can include the mask as an extra channel
-delta = G(torch.cat([x, m_arc], dim=1))
-x_ref = x + alpha * torch.tanh(delta)
-
-# discriminator update
-loss_D = D_loss(D(real_jwst), D(x_ref.detach()))
-
-# generator update
-loss_pres = smooth_l1((x_ref - x) * (1 + arc_weight * m_arc), 0)
-loss_G = adv_loss(D(x_ref)) + lambda_pres * loss_pres
-loss_G.backward()</code></pre>
-      <div class="grid" style="margin-top: 16px;">
-        <div class="span-4 check">
-          <strong>Generator size</strong>
-          4 to 6 residual blocks, 32 or 64 channels. Bigger is not the first fix.
-        </div>
-        <div class="span-4 check">
-          <strong>Discriminator size</strong>
-          PatchGAN with spectral norm or WGAN-GP. Random crops help a lot.
-        </div>
-        <div class="span-4 check">
-          <strong>First hyperparameters</strong>
-          <code>alpha=0.05</code> to <code>0.15</code>, <code>lambda_pres=10</code> to <code>100</code>,
-          <code>arc_weight=20</code>.
-        </div>
-      </div>
-    </section>
-
-    <section id="evaluation">
-      <h2>How to Know Whether It Worked</h2>
-      <div class="grid">
-        <div class="span-3 card metric">
-          <strong>Arc preservation</strong>
-          <small>
-            Source-mask weighted L1, arc aperture flux ratio, arc color ratios, and radial location
-            of bright source pixels. These should barely move.
-          </small>
-        </div>
-        <div class="span-3 card metric">
-          <strong>JWST texture</strong>
-          <small>
-            Pixel histograms, sky RMS, 2D power spectra, local noise covariance, and PSF-wing
-            statistics should move toward real cutouts.
-          </small>
-        </div>
-        <div class="span-3 card metric">
-          <strong>GAN health</strong>
-          <small>
-            D should not go perfect in the first epoch. With WGAN-GP, critic scores should remain
-            smooth and interpretable, not flatlined.
-          </small>
-        </div>
-        <div class="span-3 card metric">
-          <strong>Science utility</strong>
-          <small>
-            Train a lens classifier on raw sims versus refined sims, then test on held-out real
-            candidates or visually curated examples.
-          </small>
-        </div>
-      </div>
-
-      <div class="note violet" style="margin-top: 16px;">
-        <div class="callout-title">A good qualitative panel</div>
-        <p>
-          For each example, show: raw simulation, refined simulation, difference image, source-only
-          arc map, real JWST comparison batch, and RGB composite. If you cannot see the arc in the
-          source-only row after refinement, stop and increase the preservation loss.
-        </p>
-      </div>
-
-      <div class="note warn" style="margin-top: 16px;">
-        <div class="callout-title">Shortcut audit</div>
-        <p>
-          Before trusting any GAN result, compare simple histograms for simulated versus real cutouts:
-          brightest-galaxy position, lens/candidate center, radial flux profile, arc radius, and
-          background RMS. If a one-line feature like "distance from image center" separates real from
-          fake, the simulator parameters still need work.
-        </p>
-      </div>
-    </section>
-
-    <section id="roadmap">
-      <h2>Practical NERSC Roadmap</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Stage</th>
-            <th>Run</th>
-            <th>Success criterion</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>0. Data + parameter audit</td>
-            <td>Load 256 simulated and 256 real 4-band cutouts. Plot RGBs, masks, lens-center histograms, crop offsets, radial profiles, and pixel histograms.</td>
-            <td>No NaNs, sensible fixed scaling, matching band order, and no obvious "center means fake" shortcut.</td>
-          </tr>
-          <tr>
-            <td>1. Parameter-calibrated sims</td>
-            <td>Add sampled lens/source centers and crop offsets to <code>simulate_v3.py</code>. Save them in output arrays and metadata.</td>
-            <td>Simulated and real cutouts have comparable position/crop statistics.</td>
-          </tr>
-          <tr>
-            <td>2. Nuisance GAN</td>
-            <td>Proposal C, 1 GPU, 1 to 2 hours, small crops.</td>
-            <td>Stable D, realistic noise/residual texture, zero arc damage.</td>
-          </tr>
-          <tr>
-            <td>3. Residual SimGAN</td>
-            <td>Proposal B, 4-band 125x125, batch 16 or 32, WGAN-GP or hinge.</td>
-            <td>Refined images visibly closer to JWST while arc-preservation metrics stay tight.</td>
-          </tr>
-          <tr>
-            <td>4. Matched real targets</td>
-            <td>Repeat the parameter-calibrated + residual setup using central-galaxy/lens-candidate real cutouts.</td>
-            <td>D no longer wins from semantic shortcuts; refined images look lens-like and JWST-like.</td>
-          </tr>
-          <tr>
-            <td>5. Conditional or Cycle model</td>
-            <td>Try Proposal D or E only after Stage 3 is stable.</td>
-            <td>Improves parameter, texture, and arc-preservation metrics, not merely prettier images.</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section id="ranking">
-      <h2>Final Ranking</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <th>Architecture</th>
-            <th>Why</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>1</td>
-            <td>Parameter-Calibrated Simulator + Residual SimGAN</td>
-            <td>Best match to the actual failure mode: it can change lens/crop parameters and then refine image style.</td>
-          </tr>
-          <tr>
-            <td>2</td>
-            <td>Multi-band Residual SimGAN with PatchGAN</td>
-            <td>Good image refiner once simulator parameters are already close to real cutouts.</td>
-          </tr>
-          <tr>
-            <td>3</td>
-            <td>Nuisance-Only Residual GAN</td>
-            <td>Safest diagnostic. Great for proving the real-data loader and loss are sane.</td>
-          </tr>
-          <tr>
-            <td>4</td>
-            <td>Physics-Conditioned Residual GAN</td>
-            <td>Natural upgrade once the basic refiner works and extra parameters are saved.</td>
-          </tr>
-          <tr>
-            <td>5</td>
-            <td>Paired Simulator-Component GAN</td>
-            <td>Very interpretable, but requires saving more simulator components.</td>
-          </tr>
-          <tr>
-            <td>6</td>
-            <td>Masked CycleGAN-Lite</td>
-            <td>Powerful for unpaired data, but more ways to fool itself. Use later.</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section id="references">
-      <h2>References and Local Files Read</h2>
-      <div class="grid">
-        <div class="span-6">
-          <h3>Local project files</h3>
-          <ul>
-            <li><a href="README.md"><code>agenticlenssim/README.md</code></a></li>
-            <li><a href="Summary.txt"><code>agenticlenssim/Summary.txt</code></a></li>
-            <li><a href="simulate_v3.py"><code>agenticlenssim/simulate_v3.py</code></a></li>
-            <li><a href="prep_mosaic.py"><code>agenticlenssim/prep_mosaic.py</code></a></li>
-            <li><a href="prep_sources.py"><code>agenticlenssim/prep_sources.py</code></a></li>
-            <li><a href="prep_lenses.py"><code>agenticlenssim/prep_lenses.py</code></a></li>
-            <li><a href="train_cvae.py"><code>agenticlenssim/train_cvae.py</code></a></li>
-            <li><a href="../lenssim/gan/train.py"><code>lenssim/gan/train.py</code></a></li>
-            <li><a href="../lenssim/gan/networks.py"><code>lenssim/gan/networks.py</code></a></li>
-            <li><a href="../lenssim/gan/losses.py"><code>lenssim/gan/losses.py</code></a></li>
-            <li><a href="../lenssim/gan/data_loader.py"><code>lenssim/gan/data_loader.py</code></a></li>
-          </ul>
-        </div>
-        <div class="span-6">
-          <h3>GAN papers behind the design</h3>
-          <ul>
-            <li>
-              <a href="https://arxiv.org/abs/1612.07828">SimGAN / S+U learning</a>:
-              simulator outputs refined with unlabeled real data, plus self-regularization,
-              local adversarial loss, and a history buffer.
-            </li>
-            <li>
-              <a href="https://arxiv.org/abs/1611.07004">pix2pix</a>:
-              conditional image-to-image GANs and PatchGAN-style local discrimination.
-            </li>
-            <li>
-              <a href="https://openaccess.thecvf.com/content_ICCV_2017/papers/Zhu_Unpaired_Image-To-Image_Translation_ICCV_2017_paper.pdf">CycleGAN</a>:
-              unpaired image translation with cycle consistency.
-            </li>
-            <li>
-              <a href="https://arxiv.org/abs/1704.00028">WGAN-GP</a>:
-              gradient penalty for more stable adversarial training.
-            </li>
-          </ul>
-        </div>
-      </div>
-      <p class="footer">
-        Generated on 2026-05-24. The recommendations assume the real JWST target data will be
-        available later on NERSC and that the simulator output format remains close to the current
-        v3 files.
-      </p>
-    </section>
-  </main>
+</main>
 </body>
 </html>
