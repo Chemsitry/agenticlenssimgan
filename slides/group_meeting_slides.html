@@ -6,66 +6,69 @@
 <title>Diagnosing the lens simulator with a discriminator</title>
 <style>
 :root{
-  --cy:#5ff;          /* primary accent */
-  --cy-dim:#0aa;      /* dark cyan for borders */
-  --cy-deep:#044;     /* fills */
-  --bg:#000;
-  --fg:#e8feff;
-  --mut:#7fa6aa;
+  --cy:#5ff;           /* accent only */
+  --fg:#f2f2f2;        /* main text: white */
+  --mut:#9b9b9b;       /* secondary text: gray */
+  --line:#333;         /* borders: dark gray */
+  --panel:#0d0d0d;
   --warn:#ffb84d;
   --bad:#ff5f7a;
+  --bg:#000;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
 body{background:var(--bg);color:var(--fg);font-family:"Segoe UI",-apple-system,Helvetica,Arial,sans-serif;}
 #deck{height:100vh;overflow-y:scroll;scroll-snap-type:y mandatory;}
-.slide{min-height:100vh;scroll-snap-align:start;padding:3.2vh 4vw 5vh;display:flex;flex-direction:column;position:relative;border-bottom:1px solid #033;}
-.slide-tag{position:absolute;top:2.2vh;right:4vw;color:var(--cy-dim);font-size:.78rem;letter-spacing:.2em;text-transform:uppercase;}
-h1{color:var(--cy);font-size:clamp(1.6rem,3.2vw,2.6rem);font-weight:700;line-height:1.15;}
-h2{color:var(--cy);font-size:clamp(1.3rem,2.4vw,2rem);margin-bottom:1.6vh;}
-h3{color:var(--fg);font-size:clamp(.95rem,1.3vw,1.15rem);margin-bottom:.6vh;}
+.slide{min-height:100vh;scroll-snap-align:start;padding:3.2vh 4vw 5.5vh;display:flex;flex-direction:column;position:relative;border-bottom:1px solid #1a1a1a;}
+.slide-tag{position:absolute;top:2.2vh;right:4vw;color:var(--mut);font-size:.75rem;letter-spacing:.2em;text-transform:uppercase;}
+h1{color:var(--fg);font-size:clamp(1.6rem,3.2vw,2.6rem);font-weight:700;line-height:1.18;}
+h1 em{color:var(--cy);font-style:normal;}
+h2{color:var(--fg);font-size:clamp(1.25rem,2.3vw,1.9rem);margin-bottom:1.4vh;}
+h2 em{color:var(--cy);font-style:normal;}
+h3{color:var(--fg);font-size:clamp(.95rem,1.3vw,1.1rem);margin-bottom:.6vh;}
 p{line-height:1.45;}
-.sub{color:var(--mut);font-size:clamp(.9rem,1.2vw,1.05rem);margin-top:.6vh;max-width:75ch;}
+.sub{color:var(--mut);font-size:clamp(.9rem,1.2vw,1.05rem);margin-top:.8vh;max-width:80ch;}
 code{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--cy);font-size:.92em;}
 .row{display:flex;gap:1.4vw;align-items:stretch;}
 .col{flex:1;min-width:0;}
-.box{border:1px solid var(--cy-dim);padding:1.4vh 1.1vw;}
-.fillbox{background:var(--cy-deep);border:1px solid var(--cy-dim);padding:1.4vh 1.1vw;}
-.chiprow{display:flex;flex-wrap:wrap;gap:.6vw;margin:1.4vh 0;}
-.chip{border:1px solid var(--cy-dim);padding:.5vh .8vw;font-size:clamp(.78rem,1vw,.95rem);}
-.chip b{color:var(--cy);font-size:1.25em;margin-right:.35em;}
-.kicker{color:var(--cy);letter-spacing:.25em;text-transform:uppercase;font-size:.8rem;margin-bottom:1vh;}
+.box{border:1px solid var(--line);background:var(--panel);padding:1.4vh 1.1vw;}
+.accent{border-left:3px solid var(--cy);}
+.kicker{color:var(--cy);letter-spacing:.25em;text-transform:uppercase;font-size:.8rem;margin-bottom:1.2vh;}
 table{border-collapse:collapse;width:100%;font-size:clamp(.78rem,1.05vw,.95rem);}
-th,td{border:1px solid #066;padding:.7vh .7vw;text-align:left;vertical-align:top;}
-th{color:var(--cy);font-weight:700;background:#021c1c;}
+th,td{border:1px solid var(--line);padding:.7vh .7vw;text-align:left;vertical-align:top;}
+th{color:var(--fg);font-weight:700;background:#121212;}
 .warn{color:var(--warn);}
 .bad{color:var(--bad);}
 .good{color:var(--cy);}
-.tells{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2vh 1vw;flex:1;min-height:0;}
-.tell{border:1px solid var(--cy-dim);padding:1vh .8vw;display:flex;flex-direction:column;gap:.5vh;}
-.tell h3{font-size:clamp(.85rem,1.15vw,1.05rem);color:var(--cy);}
-.tell p{font-size:clamp(.74rem,.95vw,.9rem);color:var(--fg);line-height:1.35;}
-.tell .src{color:var(--mut);font-size:clamp(.68rem,.85vw,.8rem);margin-top:auto;}
-.sev{display:flex;align-items:center;gap:.5vw;font-size:.72rem;color:var(--mut);}
-.sevbar{height:8px;background:#033;flex:1;}
+.tells{display:grid;grid-template-columns:1fr 1fr;gap:1vh .9vw;}
+.tell{border:1px solid var(--line);background:var(--panel);padding:.9vh .8vw;}
+.tell h3{font-size:clamp(.84rem,1.1vw,1rem);}
+.tell h3 b{color:var(--cy);margin-right:.4em;}
+.tell p{font-size:clamp(.74rem,.95vw,.88rem);color:var(--mut);line-height:1.35;margin:.3vh 0 .5vh;}
+.sev{display:flex;align-items:center;gap:.6vw;font-size:.7rem;color:var(--mut);}
+.sevbar{height:7px;background:#1c1c1c;flex:1;}
 .sevbar i{display:block;height:100%;background:var(--cy);}
-svg text{font-family:inherit;}
-.flow{display:flex;align-items:center;gap:.5vw;margin:1.2vh 0;}
-.fnode{border:1px solid var(--cy);padding:1vh .8vw;text-align:center;font-size:clamp(.74rem,.95vw,.9rem);flex:1;}
-.fnode b{color:var(--cy);display:block;}
-.farr{color:var(--cy);font-size:1.3rem;flex:0 0 auto;}
-.bars{display:flex;flex-direction:column;gap:.9vh;margin-top:1vh;}
-.bar{display:grid;grid-template-columns:13ch 1fr 7ch;align-items:center;gap:.8vw;font-size:clamp(.76rem,1vw,.92rem);}
-.bar .track{height:16px;background:#021c1c;border:1px solid #066;}
+.figure{border:1px solid var(--line);background:var(--panel);padding:.6vh .5vw .8vh;}
+.figure img{display:block;width:100%;height:auto;}
+.figure figcaption{color:var(--mut);font-size:clamp(.7rem,.9vw,.82rem);margin-top:.6vh;line-height:1.35;}
+.figure figcaption b{color:var(--fg);}
+.flow{display:flex;align-items:stretch;gap:.5vw;margin:1vh 0;}
+.fnode{border:1px solid var(--line);background:var(--panel);padding:.9vh .7vw;text-align:center;font-size:clamp(.72rem,.92vw,.88rem);flex:1;color:var(--mut);}
+.fnode b{color:var(--fg);display:block;}
+.fnode.hl{border-color:var(--cy);}
+.fnode.hl b{color:var(--cy);}
+.farr{color:var(--mut);font-size:1.2rem;align-self:center;flex:0 0 auto;}
+.bars{display:flex;flex-direction:column;gap:.8vh;margin-top:1vh;}
+.bar{display:grid;grid-template-columns:14ch 1fr 6ch;align-items:center;gap:.8vw;font-size:clamp(.74rem,.98vw,.9rem);}
+.bar .track{height:14px;background:#121212;border:1px solid var(--line);}
 .bar .track i{display:block;height:100%;background:var(--cy);}
-.bar .n{color:var(--cy);font-weight:700;text-align:right;}
-.foot{position:absolute;bottom:1.6vh;left:4vw;right:4vw;display:flex;justify-content:space-between;color:#456;font-size:.72rem;}
+.bar .n{color:var(--fg);font-weight:700;text-align:right;}
+.bar .lbl{color:var(--mut);}
+.foot{position:absolute;bottom:1.6vh;left:4vw;right:4vw;display:flex;justify-content:space-between;color:#555;font-size:.72rem;}
 #dots{position:fixed;right:1.2vw;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;z-index:5;}
-#dots a{width:10px;height:10px;border:1px solid var(--cy-dim);display:block;}
+#dots a{width:9px;height:9px;border:1px solid #444;display:block;}
 #dots a.on{background:var(--cy);border-color:var(--cy);}
-.legend{display:flex;gap:1.2vw;font-size:.74rem;color:var(--mut);margin-top:.6vh;}
-.legend i{display:inline-block;width:10px;height:10px;margin-right:.3em;vertical-align:-1px;}
-@media (max-width:900px){.tells{grid-template-columns:repeat(2,1fr);}.row{flex-direction:column;}}
+@media (max-width:900px){.row{flex-direction:column;}.tells{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -77,290 +80,207 @@ svg text{font-family:inherit;}
 
 <!-- ============================ SLIDE 1 ============================ -->
 <section class="slide" id="s1">
-  <div class="slide-tag">1 / 4 · context</div>
-  <div class="kicker">sim-vs-real feedback · group meeting · june 10, 2026</div>
-  <h1>Can a discriminator tell Nate's sims from real JWST data?<br>A code-level prediction + a plan.</h1>
-  <p class="sub">v8 changed the game: each sample is <b style="color:var(--cy)">one real COSMOS-Web cutout</b> with only the lensed arcs simulated. Non-lensed sims are bit-identical to real data &mdash; so "is it realistic?" collapses to a single question: <b style="color:var(--cy)">do the injected arcs look real?</b></p>
+  <div class="slide-tag">1 / 4</div>
+  <div class="kicker">group meeting · june 10, 2026</div>
+  <h1>Reading the simulator with a <em>discriminator's eyes</em>:<br>predictions, an experiment design, and the failure modes.</h1>
+  <p class="sub">Premise: if a classifier can tell sims from real JWST data, the <i>reasons why</i> are a ranked to-do list for the simulator. We read the v8/v9 code looking for what such a classifier would exploit — before training anything.</p>
 
-  <div class="row" style="flex:1;align-items:center;margin-top:1.5vh;">
-    <div class="col" style="flex:1.5;">
-      <svg viewBox="0 0 760 230" width="100%" style="max-height:34vh;">
-        <!-- real scene -->
-        <rect x="10" y="30" width="180" height="180" fill="#021c1c" stroke="#5ff"/>
-        <circle cx="100" cy="120" r="34" fill="#044" stroke="#5ff"/>
-        <circle cx="100" cy="120" r="16" fill="#5ff" opacity=".85"/>
-        <circle cx="45" cy="65" r="7" fill="#0aa"/>
-        <circle cx="155" cy="180" r="5" fill="#0aa"/>
-        <circle cx="160" cy="55" r="4" fill="#0aa"/>
-        <text x="100" y="22" fill="#5ff" font-size="13" text-anchor="middle">REAL SCENE</text>
-        <text x="100" y="226" fill="#7fa6aa" font-size="10" text-anchor="middle">630&#178; px &#183; 4 bands &#183; untouched pixels</text>
-        <!-- plus -->
-        <text x="225" y="128" fill="#5ff" font-size="34" text-anchor="middle">+</text>
-        <!-- arcs -->
-        <rect x="260" y="30" width="180" height="180" fill="#021c1c" stroke="#5ff"/>
-        <path d="M 305 175 A 58 58 0 0 1 295 80" stroke="#5ff" stroke-width="7" fill="none" stroke-linecap="round"/>
-        <path d="M 398 70 A 58 58 0 0 1 408 145" stroke="#5ff" stroke-width="5" fill="none" stroke-linecap="round" opacity=".7"/>
-        <text x="350" y="22" fill="#5ff" font-size="13" text-anchor="middle">SIMULATED ARCS</text>
-        <text x="350" y="226" fill="#7fa6aa" font-size="10" text-anchor="middle">lenstronomy SIE+shear &#183; VELA source &#183; Poisson</text>
-        <!-- equals -->
-        <text x="475" y="128" fill="#5ff" font-size="34" text-anchor="middle">=</text>
-        <!-- composite -->
-        <rect x="510" y="30" width="180" height="180" fill="#021c1c" stroke="#5ff"/>
-        <circle cx="600" cy="120" r="34" fill="#044" stroke="#5ff"/>
-        <circle cx="600" cy="120" r="16" fill="#5ff" opacity=".85"/>
-        <circle cx="545" cy="65" r="7" fill="#0aa"/>
-        <circle cx="655" cy="180" r="5" fill="#0aa"/>
-        <path d="M 555 175 A 58 58 0 0 1 545 80" stroke="#5ff" stroke-width="7" fill="none" stroke-linecap="round"/>
-        <path d="M 648 70 A 58 58 0 0 1 658 145" stroke="#5ff" stroke-width="5" fill="none" stroke-linecap="round" opacity=".7"/>
-        <text x="600" y="22" fill="#5ff" font-size="13" text-anchor="middle">TRAINING IMAGE</text>
-        <text x="600" y="226" fill="#7fa6aa" font-size="10" text-anchor="middle">~99% real pixels; arcs are the only sim content</text>
-      </svg>
-    </div>
-    <div class="col fillbox">
-      <h3>The numbers behind one image</h3>
-      <div class="chiprow" style="margin:.8vh 0 0;">
-        <span class="chip"><b>4</b>NIRCam bands (F115W&ndash;F444W)</span>
-        <span class="chip"><b>0.03&Prime;</b>per pixel, 18.9&Prime; field</span>
-        <span class="chip"><b>46</b>real scenes in the v8 pool</span>
-        <span class="chip"><b>20,421</b>VELA hydro-sim sources</span>
-        <span class="chip"><b>0.5&ndash;1.5&Prime;</b>Einstein radii kept</span>
-        <span class="chip"><b>~200 GB</b>DR0.5 mosaics on NERSC disk</span>
-        <span class="chip"><b>440</b>real COWLS lenses, same survey</span>
+  <div class="row" style="flex:1;align-items:center;margin-top:1.6vh;">
+    <figure class="figure" style="flex:2.2;">
+      <img src="assets/01_buildup.png" alt="End-to-end buildup of one simulated lens">
+      <figcaption><b>From our end-to-end trace of the pipeline</b> (v3-era figure; the arc physics — ray-tracing, PSF, Poisson — is unchanged in v8/v9). In v8/v9 only the arc layers are synthetic; everything else in a training image is real pixels, which is exactly why the question narrows to <b>"do the injected arcs look real?"</b></figcaption>
+    </figure>
+    <div class="col">
+      <div class="box accent" style="margin-bottom:1.2vh;">
+        <h3>Today</h3>
+        <p style="font-size:clamp(.82rem,1.05vw,.95rem);color:var(--mut);">
+          1 &middot; Six code-level predictions of what a discriminator would key on<br>
+          2 &middot; The experiment: which real data we compare against, and why that choice is the hard part<br>
+          3 &middot; Risks + what we need from you
+        </p>
+      </div>
+      <div class="box">
+        <p style="font-size:clamp(.82rem,1.05vw,.95rem);color:var(--mut);">Deliverable is <b style="color:var(--fg)">feedback, not refined images</b>: heatmaps, band ablations, and parameter correlations from a trained discriminator, handed back as evidence.</p>
       </div>
     </div>
   </div>
-
-  <div class="box" style="border-color:var(--cy);">
-    <p><b style="color:var(--cy)">Goal of this work:</b> not to refine images &mdash; to train a discriminator, read its mind (heatmaps, ablations, correlations), and hand back a ranked list of <i>where</i> sims and reality disagree. The discriminator is the instrument; the feedback is the deliverable.</p>
-  </div>
-  <div class="foot"><span>agenticlenssimgan · gan_plan.md / gan_architecture_proposals.html · 2026-06-10</span><span>scroll or &darr; to advance</span></div>
+  <div class="foot"><span>agenticlenssimgan · 2026-06-10</span><span>scroll or &darr; to advance</span></div>
 </section>
 
 <!-- ============================ SLIDE 2 ============================ -->
 <section class="slide" id="s2">
-  <div class="slide-tag">2 / 4 · predictions</div>
-  <h2>What a discriminator would key on &mdash; six predictions from reading the code</h2>
-  <p class="sub" style="margin-bottom:1.4vh;">Each is a fixed value or modeling choice in <code>simulate_v8.py</code> &mdash; independently testable, independently fixable. Bars = guessed visibility to a 4-band patch discriminator.</p>
+  <div class="slide-tag">2 / 4</div>
+  <h2>Six predictions: <em>what a discriminator would exploit</em></h2>
+  <p class="sub" style="margin-bottom:1.2vh;">All from reading the code — each independently testable and independently fixable. Bars = guessed visibility to a 4-band patch discriminator.</p>
 
-  <div class="tells">
-
-    <div class="tell">
-      <h3>1 · Every lens has the same shape</h3>
-      <svg viewBox="0 0 220 64" width="100%">
-        <text x="50" y="11" fill="#7fa6aa" font-size="9" text-anchor="middle">SIM</text>
-        <ellipse cx="20" cy="38" rx="14" ry="12" fill="none" stroke="#5ff"/>
-        <ellipse cx="52" cy="38" rx="14" ry="12" fill="none" stroke="#5ff"/>
-        <ellipse cx="84" cy="38" rx="14" ry="12" fill="none" stroke="#5ff"/>
-        <text x="166" y="11" fill="#7fa6aa" font-size="9" text-anchor="middle">REAL (COWLS)</text>
-        <ellipse cx="136" cy="38" rx="15" ry="7" fill="none" stroke="#7fa6aa" transform="rotate(-25 136 38)"/>
-        <ellipse cx="168" cy="38" rx="11" ry="11" fill="none" stroke="#7fa6aa"/>
-        <ellipse cx="200" cy="38" rx="16" ry="6" fill="none" stroke="#7fa6aa" transform="rotate(40 200 38)"/>
-      </svg>
-      <p>SIE ellipticity fixed at <code>(0.05, 0.02)</code>, shear at <code>(0.02, 0.01)</code> &mdash; one near-circular mass family generates every arc.</p>
-      <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:90%"></i></span></div>
-      <span class="src">simulate_v8.py · kwargs_lens</span>
+  <div class="row" style="flex:1;">
+    <div class="col" style="flex:1.35;display:flex;flex-direction:column;gap:1vh;">
+      <div class="tells">
+        <div class="tell">
+          <h3><b>1</b>Every lens has the same shape</h3>
+          <p>Ellipticity frozen at <code>(0.05, 0.02)</code>, shear at <code>(0.02, 0.01)</code> &rarr; one near-circular arc family. The sweep figure shows how much morphology that freezes out.</p>
+          <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:90%"></i></span></div>
+        </div>
+        <div class="tell">
+          <h3><b>2</b>Arc/lens flux ratio is constant</h3>
+          <p>Always 0.25 &times; the lens-peak proxy; real ratios (COWLS photometry) span orders of magnitude.</p>
+          <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:80%"></i></span></div>
+        </div>
+        <div class="tell">
+          <h3><b>3</b>Noise seam at the arc footprint</h3>
+          <p>Injected photons get uncorrelated Poisson noise; the surrounding mosaic noise is drizzle-correlated. Texture changes exactly where the sim content is.</p>
+          <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:65%"></i></span></div>
+        </div>
+        <div class="tell">
+          <h3><b>4</b>Mass at (0,0), light wherever it is</h3>
+          <p>Mass model pinned to image center; the real galaxy is only near center &rarr; arcs can curve around a point offset from the visible lens.</p>
+          <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:55%"></i></span></div>
+        </div>
+        <div class="tell">
+          <h3><b>5</b>Arcs identical in all four bands</h3>
+          <p>Per-band-normalized source stamps &times; one analytic SED = same morphology everywhere; real star-forming sources are clumpier/bluer in blue bands.</p>
+          <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:50%"></i></span></div>
+        </div>
+        <div class="tell">
+          <h3><b>6</b>&theta;<sub>E</sub> blind to lens brightness <span class="good">(v9 fixes)</span></h3>
+          <p>v8 draws &sigma;<sub>v</sub> independently of the scene. v9's Faber&ndash;Jackson fix gives us a built-in experiment: D should find v9 measurably harder than v8.</p>
+          <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:45%"></i></span></div>
+        </div>
+      </div>
+      <figure class="figure">
+        <img src="assets/03_rgb.png" alt="RGB composite: lens only, arcs only, final">
+        <figcaption><b>Our RGB trace</b> — arc color comes from one analytic SED on identical per-band morphology (prediction 5): the color is right on average, but the <i>same</i> in every clump.</figcaption>
+      </figure>
     </div>
-
-    <div class="tell">
-      <h3>2 · Arc/lens flux ratio is a constant</h3>
-      <svg viewBox="0 0 220 64" width="100%">
-        <text x="50" y="11" fill="#7fa6aa" font-size="9" text-anchor="middle">SIM: always 0.25</text>
-        <rect x="12" y="22" width="10" height="36" fill="#5ff"/><rect x="24" y="49" width="10" height="9" fill="#044" stroke="#5ff"/>
-        <rect x="48" y="22" width="10" height="36" fill="#5ff"/><rect x="60" y="49" width="10" height="9" fill="#044" stroke="#5ff"/>
-        <text x="166" y="11" fill="#7fa6aa" font-size="9" text-anchor="middle">REAL: spans decades</text>
-        <rect x="128" y="22" width="10" height="36" fill="#7fa6aa"/><rect x="140" y="54" width="10" height="4" fill="#022" stroke="#7fa6aa"/>
-        <rect x="164" y="22" width="10" height="36" fill="#7fa6aa"/><rect x="176" y="28" width="10" height="30" fill="#022" stroke="#7fa6aa"/>
-      </svg>
-      <p>Total arc flux = lens peak proxy &times; <code>50 &times; 0.25</code>, every system. COWLS lens/source magnitudes show the real ratio varies by orders of magnitude.</p>
-      <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:80%"></i></span></div>
-      <span class="src">simulate_v8.py · amp anchoring</span>
-    </div>
-
-    <div class="tell">
-      <h3>3 · Mass at (0,0), light wherever it is</h3>
-      <svg viewBox="0 0 220 64" width="100%">
-        <ellipse cx="96" cy="34" rx="20" ry="14" fill="#044" stroke="#7fa6aa"/>
-        <path d="M 130 56 A 36 36 0 0 0 146 16" stroke="#5ff" stroke-width="4" fill="none" stroke-linecap="round"/>
-        <line x1="104" y1="26" x2="116" y2="38" stroke="#5ff"/><line x1="116" y1="26" x2="104" y2="38" stroke="#5ff"/>
-        <text x="60" y="58" fill="#7fa6aa" font-size="9">light centroid</text>
-        <text x="132" y="12" fill="#5ff" font-size="9">mass = (0,0)</text>
-      </svg>
-      <p>The mass model is pinned to the image center; the real galaxy is only <i>near</i> center. Arcs can curve around a point offset from the visible lens.</p>
-      <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:55%"></i></span></div>
-      <span class="src">simulate_v8.py · center_x/y = 0</span>
-    </div>
-
-    <div class="tell">
-      <h3>4 · A noise seam at the arc footprint</h3>
-      <svg viewBox="0 0 220 64" width="100%" class="noiseswatch" data-left="corr" data-right="poiss"></svg>
-      <p>Arcs get pure Poisson noise on injected photons; the surrounding mosaic noise is drizzle-correlated + read noise. The texture changes exactly where the sim content is.</p>
-      <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:65%"></i></span></div>
-      <span class="src">simulate_v8.py · sim_to_elec / Poisson</span>
-    </div>
-
-    <div class="tell">
-      <h3>5 · Arcs identical in all 4 bands</h3>
-      <svg viewBox="0 0 220 64" width="100%">
-        <g id="clump"></g>
-        <rect x="8"  y="16" width="44" height="40" fill="#021c1c" stroke="#5ff"/>
-        <rect x="60" y="16" width="44" height="40" fill="#021c1c" stroke="#5ff"/>
-        <rect x="112" y="16" width="44" height="40" fill="#021c1c" stroke="#5ff"/>
-        <rect x="164" y="16" width="44" height="40" fill="#021c1c" stroke="#5ff"/>
-        <path d="M 18 50 q 14 -28 28 -28" stroke="#5ff" stroke-width="3" fill="none"/>
-        <path d="M 70 50 q 14 -28 28 -28" stroke="#5ff" stroke-width="3" fill="none"/>
-        <path d="M 122 50 q 14 -28 28 -28" stroke="#5ff" stroke-width="3" fill="none"/>
-        <path d="M 174 50 q 14 -28 28 -28" stroke="#5ff" stroke-width="3" fill="none"/>
-        <text x="30" y="12" fill="#7fa6aa" font-size="8" text-anchor="middle">F115W</text>
-        <text x="82" y="12" fill="#7fa6aa" font-size="8" text-anchor="middle">F150W</text>
-        <text x="134" y="12" fill="#7fa6aa" font-size="8" text-anchor="middle">F277W</text>
-        <text x="186" y="12" fill="#7fa6aa" font-size="8" text-anchor="middle">F444W</text>
-      </svg>
-      <p>VELA stamps are normalized per band, so one morphology &times; one analytic SED. Real star-forming sources are clumpier and bluer in blue bands.</p>
-      <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:50%"></i></span></div>
-      <span class="src">prep_vela_v7.py · per-band sum=1</span>
-    </div>
-
-    <div class="tell">
-      <h3>6 · &theta;<sub>E</sub> blind to lens brightness <span class="good">(v9 fixes this)</span></h3>
-      <svg viewBox="0 0 220 64" width="100%">
-        <g class="scatter" data-mode="random" data-x="14" ></g>
-        <g class="scatter" data-mode="corr" data-x="124"></g>
-        <line x1="12" y1="58" x2="100" y2="58" stroke="#066"/><line x1="12" y1="58" x2="12" y2="14" stroke="#066"/>
-        <line x1="122" y1="58" x2="210" y2="58" stroke="#066"/><line x1="122" y1="58" x2="122" y2="14" stroke="#066"/>
-        <text x="56" y="10" fill="#7fa6aa" font-size="9" text-anchor="middle">v8: uncorrelated</text>
-        <text x="166" y="10" fill="#5ff" font-size="9" text-anchor="middle">v9: Faber&ndash;Jackson</text>
-      </svg>
-      <p>v8 draws &sigma;<sub>v</sub> independently of the scene &mdash; a dwarf can get 320 km/s. v9 derives &sigma;<sub>v</sub> from the cutout's own photometry (+31 measured DESI &sigma;<sub>v</sub>). Built-in experiment: D should find v9 harder.</p>
-      <div class="sev"><span>visibility</span><span class="sevbar"><i style="width:45%"></i></span></div>
-      <span class="src">v9_consistent/ · FJ calibration</span>
-    </div>
-
+    <figure class="figure col" style="display:flex;flex-direction:column;justify-content:center;">
+      <img src="assets/02_sweeps.png" alt="Parameter sweeps: theta_E, external shear, source offset" style="max-height:72vh;object-fit:contain;">
+      <figcaption><b>Our parameter sweep trace</b>: &theta;<sub>E</sub> (top), external shear (middle), source offset (bottom) each reshape arcs dramatically. v8 freezes shear + ellipticity (prediction 1), so all the middle-row variety is absent from the sims.</figcaption>
+    </figure>
   </div>
-  <div class="foot"><span>predictions only &mdash; the discriminator confirms, refutes, and ranks these (and hunts what's not on the list)</span><span>2 / 4</span></div>
+  <div class="foot"><span>predictions only — the discriminator confirms, refutes, ranks, and hunts what's not on this list</span><span>2 / 4</span></div>
 </section>
 
 <!-- ============================ SLIDE 3 ============================ -->
 <section class="slide" id="s3">
-  <div class="slide-tag">3 / 4 · plan</div>
-  <h2>The plan: dataset design <i>is</i> the experiment</h2>
+  <div class="slide-tag">3 / 4</div>
+  <h2>The experiment: <em>dataset design is the hard part</em></h2>
 
-  <div class="row" style="margin-bottom:1.6vh;">
+  <div class="row" style="margin-bottom:1.4vh;">
     <div class="col box" style="border-color:var(--bad);">
-      <h3 class="bad">The trap to avoid</h3>
-      <p style="font-size:clamp(.8rem,1.05vw,.95rem);">Real sky has ~no strong lenses, and in v8 only lensed images contain sim pixels. So <i>lensed sims vs random real cutouts</i> trains a <b class="bad">lens detector</b> &mdash; ~100% accuracy, zero insight into realism.</p>
+      <h3 class="bad">The trap</h3>
+      <p style="font-size:clamp(.8rem,1.05vw,.95rem);color:var(--mut);">Real sky has ~no strong lenses, and only lensed sims contain sim pixels. So <i>lensed sims vs random cutouts</i> trains a <b class="bad">lens detector</b> — ~100% accuracy, zero insight.</p>
     </div>
-    <div class="col box" style="border-color:var(--cy);flex:1.4;">
-      <h3 class="good">The primary experiment</h3>
-      <p style="font-size:clamp(.8rem,1.05vw,.95rem);"><b style="color:var(--cy)">v9 lensed sims vs real lens cutouts at the 440 COWLS positions</b> (same mosaics, same depth). Both piles have lens + arcs &rarr; D must judge whether the <i>arcs look real</i>. Control: a real-vs-real null test that must score ~50%, or our own pipeline is biased.</p>
+    <div class="col box accent" style="flex:1.4;">
+      <h3>The primary comparison</h3>
+      <p style="font-size:clamp(.8rem,1.05vw,.95rem);color:var(--mut);"><b style="color:var(--fg)">Lensed sims vs real lens cutouts at the 440 COWLS positions</b> — same mosaics, same depth, both piles have lens + arcs &rarr; D is forced to judge <b style="color:var(--cy)">arc realism</b>. Gate: a real-vs-real null control that must score ~50%, or our pipeline is biased.</p>
     </div>
   </div>
 
   <div class="row" style="flex:1;">
     <div class="col">
-      <h3>Scene pool: the bottleneck, and the fix already in the repo</h3>
-      <p class="sub" style="font-size:clamp(.78rem,1vw,.9rem);">v8 ships 46 scenes (caps datasets at 92 images). Nate's v9 catalogs already list 1,015 scene galaxies + 1,236 JADES ellipticals &mdash; the coordinates are in git; we extract the pixels.</p>
+      <h3>Scene pool: from 46 to thousands using your v9 catalogs</h3>
+      <p class="sub" style="font-size:clamp(.76rem,1vw,.9rem);">The coordinates are already in git — we extract the pixels on NERSC. 242 positions fall inside the COSMOS mosaic we already have on disk (<b style="color:var(--fg)">zero downloads</b>).</p>
       <div class="bars">
-        <div class="bar"><span>v8 pool</span><span class="track"><i style="width:2%"></i></span><span class="n">46</span></div>
-        <div class="bar"><span>Phase A <span style="color:var(--mut)">(COSMOS, on disk)</span></span><span class="track"><i style="width:11%"></i></span><span class="n">242</span></div>
-        <div class="bar"><span>Phase B <span style="color:var(--mut)">(+UDS/GDN/CEERS)</span></span><span class="track"><i style="width:45%"></i></span><span class="n">1,015</span></div>
-        <div class="bar"><span>+ JADES DR5 merge</span><span class="track"><i style="width:100%"></i></span><span class="n">2,251</span></div>
+        <div class="bar"><span class="lbl">v8 pool</span><span class="track"><i style="width:2%"></i></span><span class="n">46</span></div>
+        <div class="bar"><span class="lbl">+ COSMOS (on disk)</span><span class="track"><i style="width:11%"></i></span><span class="n">242</span></div>
+        <div class="bar"><span class="lbl">+ UDS / GDN / CEERS</span><span class="track"><i style="width:45%"></i></span><span class="n">1,015</span></div>
+        <div class="bar"><span class="lbl">+ JADES DR5 merge</span><span class="track"><i style="width:100%"></i></span><span class="n">2,251</span></div>
       </div>
-      <p class="sub" style="font-size:clamp(.74rem,.95vw,.86rem);margin-top:.8vh;">Phase A needs <b style="color:var(--cy)">zero downloads</b> &mdash; 242 positions fall in the COSMOS mosaic already on NERSC. Plus: lensed-only generation (kills the 92 cap), free noise re-realizations from saved noiseless arcs, ~80 patches per 630-px image.</p>
+      <p class="sub" style="font-size:clamp(.74rem,.95vw,.86rem);margin-top:1vh;">Plus sample multipliers: lensed-only generation (removes the <code>--n 92</code> cap), fresh Poisson re-realizations from the saved noiseless arcs, ~80 discriminator patches per 630-px image, 8&times; dihedral augmentation.</p>
     </div>
     <div class="col" style="flex:1.25;">
       <h3>Pipeline</h3>
       <div class="flow">
-        <div class="fnode"><b>Scenes</b>242 COSMOS cutouts from v9 catalog</div>
+        <div class="fnode"><b>Scenes</b>242 COSMOS cutouts (v9 catalog)</div>
         <div class="farr">&rarr;</div>
-        <div class="fnode"><b>Sims</b>v8 + v9 lensed-only, ~20 systems/scene</div>
+        <div class="fnode"><b>Sims</b>v8 + v9 lensed-only</div>
         <div class="farr">&rarr;</div>
-        <div class="fnode"><b>Reals</b>440 COWLS lens cutouts</div>
+        <div class="fnode"><b>Reals</b>440 COWLS cutouts</div>
       </div>
       <div class="flow">
         <div class="fnode"><b>Baseline</b>PCA + logistic (number to beat)</div>
         <div class="farr">&rarr;</div>
-        <div class="fnode"><b>Discriminator</b>4-band PatchGAN, &le;3M params, hinge + spectral norm</div>
+        <div class="fnode"><b>Discriminator</b>4-band PatchGAN, &le;3M params</div>
         <div class="farr">&rarr;</div>
-        <div class="fnode"><b>Readout</b>patch heatmaps &middot; band ablations &middot; D-score vs &theta;<sub>E</sub>, z, scene</div>
+        <div class="fnode"><b>Readout</b>heatmaps · band ablations · D-score vs &theta;<sub>E</sub>, z, scene</div>
       </div>
       <div class="flow">
-        <div class="fnode" style="border-color:var(--cy);background:var(--cy-deep);"><b>Deliverable</b>ranked, evidence-backed list of sim&ndash;real differences + v8-vs-v9 shootout number</div>
+        <div class="fnode hl"><b>Deliverable</b>ranked, evidence-backed sim&ndash;real differences + the v8-vs-v9 number</div>
       </div>
       <table style="margin-top:.8vh;">
-        <tr><th style="width:30%">Step</th><th>Effort</th></tr>
-        <tr><td>Scene + COWLS extraction scripts</td><td>2&ndash;3 days</td></tr>
-        <tr><td>Null control + PCA baseline</td><td>2 days</td></tr>
-        <tr><td>Discriminator + readout</td><td>~2 weeks</td></tr>
-        <tr><td>Iterate with Nate per fix</td><td>~1 week / cycle</td></tr>
+        <tr><th style="width:55%">Step</th><th>Effort</th></tr>
+        <tr><td>Scene + COWLS extraction scripts</td><td>a little</td></tr>
+        <tr><td>Null control + PCA baseline</td><td>a little</td></tr>
+        <tr><td>Discriminator + readout</td><td>a lot</td></tr>
+        <tr><td>Iterating fixes with Nate</td><td>ongoing, moderate per cycle</td></tr>
       </table>
     </div>
   </div>
-  <div class="foot"><span>full detail: gan_plan.md (stages) · gan_architecture_proposals.html (data options A&ndash;E)</span><span>3 / 4</span></div>
+  <div class="foot"><span>full detail: gan_plan.md · gan_architecture_proposals.html</span><span>3 / 4</span></div>
 </section>
 
 <!-- ============================ SLIDE 4 ============================ -->
 <section class="slide" id="s4">
-  <div class="slide-tag">4 / 4 · risks &amp; asks</div>
-  <h2>Where this can go wrong &mdash; and what we do about it</h2>
+  <div class="slide-tag">4 / 4</div>
+  <h2>Failure modes <em>&amp; asks</em></h2>
 
-  <table style="margin-bottom:1.8vh;flex-shrink:0;">
-    <tr><th style="width:26%">Risk</th><th style="width:38%">How it bites</th><th>Mitigation</th></tr>
+  <table style="margin-bottom:1.6vh;flex-shrink:0;">
+    <tr><th style="width:25%">Risk</th><th style="width:37%">How it bites</th><th>Mitigation</th></tr>
     <tr>
       <td class="warn">Scene memorization</td>
       <td>Any network memorizes a small background pool; accuracy becomes fiction.</td>
-      <td>Split by <b>scene ID</b> (never random), grow pool 46 &rarr; 242 &rarr; 1,015+, arc-centered crops.</td>
+      <td>Split by <b>scene ID</b> (never random); grow the pool 46 &rarr; 242 &rarr; 1,015+; arc-centered crops.</td>
     </tr>
     <tr>
       <td class="warn">Only ~440 real lenses, ever</td>
-      <td>Nature's limit, not Nate's &mdash; deep nets overfit at N&asymp;10&sup2;.</td>
-      <td>Small D, patch-level training (~80 patches/image), 8&times; dihedral aug, k-fold CV, frozen-feature linear probes.</td>
+      <td>Nature's limit — deep nets overfit at N&asymp;10&sup2;.</td>
+      <td>Small D, patch-level training, 8&times; augmentation, k-fold CV, frozen-feature linear probes.</td>
     </tr>
     <tr>
       <td class="warn">Field signature confound</td>
-      <td>UDS/GDN/CEERS scenes differ in depth/PSF; D classifies <i>field</i>, not realism. CEERS lacks F444W.</td>
-      <td>Primary comparison COSMOS-only (COWLS is COSMOS); per-field normalization; other fields for variety/controls only.</td>
+      <td>UDS/GDN/CEERS differ in depth/PSF; D classifies <i>field</i>, not realism. CEERS lacks F444W.</td>
+      <td>Primary comparison COSMOS-only (COWLS is COSMOS); per-field normalization; other fields for variety/controls.</td>
     </tr>
     <tr>
       <td class="warn">D wins on something boring</td>
-      <td>A trivial tell (e.g. fixed flux ratio) saturates D before subtle physics is probed.</td>
-      <td>That's still feedback &mdash; fix it, regenerate, retrain. Null test gates every run; PCA baseline catches "linear &amp; boring" early.</td>
+      <td>A trivial tell (e.g. the fixed flux ratio) saturates D before subtle physics is probed.</td>
+      <td>Still feedback — fix, regenerate, retrain. Null test gates every run; PCA catches "linear &amp; boring" early.</td>
     </tr>
     <tr>
       <td class="warn">The gap isn't per-image</td>
-      <td>If the mismatch lives in population statistics (counts, clustering), no per-image D can see it.</td>
-      <td>Parameter-correlation readout covers distributions; if all else fails, escalate &mdash; that's a finding too.</td>
+      <td>If the mismatch lives in population statistics, no per-image D sees it.</td>
+      <td>Parameter-correlation readout covers distributions; otherwise escalate — that's a finding too.</td>
     </tr>
   </table>
 
   <div class="row" style="flex-shrink:0;">
-    <div class="col fillbox">
+    <div class="col box accent">
       <h3>Asks for Nate</h3>
-      <p style="font-size:clamp(.8rem,1.05vw,.95rem);line-height:1.6;">
+      <p style="font-size:clamp(.8rem,1.05vw,.95rem);line-height:1.6;color:var(--mut);">
         &bull; Bless a <code>--lensed-only</code> flag (removes the <code>--n 92</code> cap; ~10 lines)<br>
         &bull; Sanity-check our COSMOS scene extraction against your v9/v10 manifests<br>
-        &bull; Phase C: your catalog-driven selection, run over the full COSMOS-Web footprint &rarr; thousands of scenes<br>
-        &bull; Which tells on slide 2 do you already suspect? (Helps us rank.)
+        &bull; Your catalog selection over the full COSMOS-Web footprint &rarr; thousands of scenes<br>
+        &bull; Which of the six predictions do you already suspect? (Helps us rank.)
       </p>
     </div>
     <div class="col box">
-      <h3>What we do this week</h3>
-      <p style="font-size:clamp(.8rem,1.05vw,.95rem);line-height:1.6;">
-        &bull; <code>prep_scenes_from_catalog.py</code> &mdash; 242 COSMOS scenes, zero downloads<br>
-        &bull; <code>prep_cowls_cutouts.py</code> &mdash; the 440 real-lens pile<br>
+      <h3>What we start now</h3>
+      <p style="font-size:clamp(.8rem,1.05vw,.95rem);line-height:1.6;color:var(--mut);">
+        &bull; <code>prep_scenes_from_catalog.py</code> — 242 COSMOS scenes<br>
+        &bull; <code>prep_cowls_cutouts.py</code> — the 440 real-lens pile<br>
         &bull; Real-vs-real null control + PCA baseline<br>
-        &bull; Two zero-image checks meanwhile: flux-ratio &amp; &theta;<sub>E</sub> distributions, sim metadata vs COWLS CSV
+        &bull; Two zero-image checks: flux-ratio &amp; &theta;<sub>E</sub> distributions, sim metadata vs COWLS catalogue
       </p>
     </div>
   </div>
 
-  <p class="sub" style="margin-top:1.6vh;">Bottom line: the discriminator is cheap; the comparison data is the science. The catalogs to fix the data are already in the repo.</p>
-  <div class="foot"><span>repo: Chemsitry/agenticlenssimgan · docs: simulate_v8_explainer.html · 2026-06-10</span><span>4 / 4 · end</span></div>
+  <p class="sub" style="margin-top:1.4vh;">Bottom line: the discriminator is cheap; the comparison data is the science — and the catalogs that fix the data are already in the repo.</p>
+  <div class="foot"><span>repo: Chemsitry/agenticlenssimgan · 2026-06-10</span><span>4 / 4 · end</span></div>
 </section>
 
 </div>
 
 <script>
-// keyboard navigation
 const slides=[...document.querySelectorAll('.slide')];
 const dots=[...document.querySelectorAll('#dots a')];
 const deck=document.getElementById('deck');
@@ -378,39 +298,6 @@ deck.addEventListener('scroll',()=>{
   dots.forEach((d,j)=>d.classList.toggle('on',j===cur));
 });
 dots.forEach((d,j)=>d.addEventListener('click',e=>{e.preventDefault();go(j);}));
-
-// tell #4: two noise swatches (correlated vs uncorrelated) generated procedurally
-document.querySelectorAll('.noiseswatch').forEach(svg=>{
-  const ns='http://www.w3.org/2000/svg';let s='';
-  // left: correlated (smooth blobs) — low-freq noise
-  const grid=8,cell=5.5;
-  const base=[];for(let y=0;y<grid;y++){base.push([]);for(let x=0;x<grid;x++){base[y].push(Math.random());}}
-  function smooth(x,y){let t=0,n=0;for(let dy=-1;dy<2;dy++)for(let dx=-1;dx<2;dx++){const yy=y+dy,xx=x+dx;if(yy>=0&&yy<grid&&xx>=0&&xx<grid){t+=base[yy][xx];n++;}}return t/n;}
-  for(let y=0;y<grid;y++)for(let x=0;x<grid;x++){
-    s+=`<rect x="${14+x*cell}" y="${16+y*cell}" width="${cell}" height="${cell}" fill="#5ff" opacity="${(smooth(x,y)*0.5+0.08).toFixed(2)}"/>`;
-  }
-  // right: uncorrelated pixel noise
-  for(let y=0;y<grid;y++)for(let x=0;x<grid;x++){
-    s+=`<rect x="${130+x*cell}" y="${16+y*cell}" width="${cell}" height="${cell}" fill="#5ff" opacity="${(Math.random()*0.62+0.04).toFixed(2)}"/>`;
-  }
-  s+=`<text x="36" y="12" fill="#7fa6aa" font-size="9" text-anchor="middle">mosaic: correlated</text>`;
-  s+=`<text x="152" y="12" fill="#7fa6aa" font-size="9" text-anchor="middle">arcs: Poisson only</text>`;
-  s+=`<line x1="115" y1="14" x2="115" y2="62" stroke="#066" stroke-dasharray="3 3"/>`;
-  svg.innerHTML=s;
-});
-
-// tell #6: scatter plots
-document.querySelectorAll('.scatter').forEach(g=>{
-  const x0=parseFloat(g.dataset.x);let s='';
-  for(let i=0;i<16;i++){
-    const u=Math.random();
-    let px,py;
-    if(g.dataset.mode==='corr'){px=u*82;py=40-(u*34)+(Math.random()-0.5)*9;}
-    else{px=Math.random()*82;py=Math.random()*40;}
-    s+=`<circle cx="${(x0+px).toFixed(1)}" cy="${(16+Math.max(0,Math.min(40,py))).toFixed(1)}" r="2.2" fill="${g.dataset.mode==='corr'?'#5ff':'#7fa6aa'}"/>`;
-  }
-  g.innerHTML=s;
-});
 </script>
 </body>
 </html>
