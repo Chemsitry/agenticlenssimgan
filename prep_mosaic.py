@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 """
-prep_mosaic.py — Extract backgrounds and PSFs from full COSMOS-Web DR0.5 mosaics.
+prep_mosaic.py -- Extract backgrounds and PSFs from full COSMOS-Web DR0.5 mosaics.
 
 These are the deep coadded mosaics (36000x30000, 30mas/pix, ~6184s exposure)
 covering the full 0.54 deg² COSMOS-Web survey. All 4 bands are resampled to
