@@ -22,10 +22,29 @@ Output images are 630x630 pixels at 0.03"/pix (18.9" field of view), matching th
 | v1 | Single-band F115W prototype | 125x125 | Gaussian PSF, SIS lens, jw01810 data |
 | v2 | Multi-band with SLACS params | 125x125 | Empirical PSF, SIE+shear, COSMOS-Web i2d files |
 | v3 | COWLS-calibrated distributions | 125x125 | DR0.5 deep mosaics, Lyman-break SEDs |
-| **v4 (current)** | **Validated against real COWLS II data** | **630x630** | **Peak-matched amplitudes, recalibrated SEDs, 18.9" FoV** |
-| v5 (in progress) | SimGAN-refined images | 630x630 | GAN refinement for realistic galaxy morphology |
+| v4 | Validated against real COWLS II data | 630x630 | Peak-matched amplitudes, recalibrated SEDs, 18.9" FoV |
+| v5 | SimGAN-refined images | 630x630 | GAN refinement for realistic galaxy morphology |
+| v6 | Real galaxy stamps | 630x630 | INTERPOL real-galaxy stamps replace Sersic profiles |
+| v7 | VELA sources | 630x630 | 20,421 VELA hydrodynamic-simulation stamps as source light |
+| **v8 (current)** | **Single-scene architecture** | **630x630** | **One real JWST cutout per sample; only the arcs are simulated** |
+| v9_consistent (newest, experimental) | Physically consistent lens mass | 630x630 | sigma_v derived from lens photometry via Faber-Jackson; DESI sigma_v where available; stratified theta_E; lives in `v9_consistent/` |
 
-## What's New in v4
+## What's New in v6-v9 (merged 2026-06-09)
+
+- **v8 architectural rethink** (`simulate_v8.py`): stop stitching separate lens + background cutouts. Each sample is ONE real 630x630 JWST cutout ("scene"); the central lens galaxy is untouched real pixels and only the lensed source is simulated and added. Eliminates prior artifacts (force fields, chunky halos, noise doubling, visible boxes).
+- **v9_consistent** (`v9_consistent/`): in v8 the lens cutout's appearance had no relation to the sigma_v used in the SIE mass model. v9 derives sigma_v from the cutout's F115W/F150W/F277W photometry via a Faber-Jackson relation calibrated on DESI x JWST galaxies, with an inter-band consistency rejection gate and stratified theta_E sampling.
+- **Output naming (v8+):** `sources_{band}.npy` was renamed `arcs_{band}.npy`. Per-band outputs: `images_{band}.npy` (composite), `galaxies_{band}.npy` (real scene only), `arcs_{band}.npy` (simulated arcs only).
+
+### Bug fixes (v6-v8)
+
+| Fix | Bug |
+|---|---|
+| v6 stamp augmentation | Rotation/flip was drawn per band, so one galaxy had different orientations in each of the 4 bands (non-physical). Now decided once per system. |
+| v8 source SED | `starforming_color_ratios()` was computed but never applied; arcs had identical flux in all bands. Arcs now show Lyman-break dropout and Balmer break. |
+| v8 scene pool | Stars (JWST diffraction spikes) passed the concentration filter and appeared as central "lens galaxies". Removed via a compactness cut (flux(r<3)/flux(r<15) in F444W, threshold 0.35). |
+| v8 duplicates | Non-lensed images sampled scenes with replacement, producing pixel-identical duplicates. Scenes are now assigned without replacement. |
+
+## What Was New in v4
 
 - **SED color ratios recalibrated** against PyAutoLens-decomposed photometry from the COWLS II catalogue (440 real lens systems). Our `elliptical_color_ratios()` and `starforming_color_ratios()` functions now match real data within the observed scatter.
 - **Peak-matched amplitude calibration** validated against a real COWLS II lens (Lens E), replacing the unconstrained stellar mass formula from v3.
@@ -150,8 +169,11 @@ Refine simulated images using a SimGAN trained on real galaxy morphology:
 
 | File | Purpose |
 |------|---------|
-| `simulate_v4.py` | **Main simulation pipeline** (v4) — generates multi-band lens images |
-| `simulate_v3.py` | Previous pipeline (v3, preserved) |
+| `simulate_v8.py` | **Main simulation pipeline** (v8) — real scene + simulated arcs |
+| `v9_consistent/simulate_v9_consistent.py` | Newest pipeline (v9) — photometry-consistent lens mass |
+| `prep_scenes_v8.py` / `prep_lenses_v8.py` | Build the v8 real-scene pool (with star/compactness filtering) |
+| `prep_vela_v7.py` | Extract VELA hydrodynamic-simulation source stamps |
+| `simulate_v7.py` / `simulate_v6.py` / `simulate_v4.py` / `simulate_v3.py` | Previous pipelines (preserved) |
 | `prep_mosaic.py` | Extract backgrounds/PSFs from DR0.5 mosaics |
 | `validate_f115w.py` | Single-band validation against real COWLS II Lens E |
 
@@ -171,6 +193,13 @@ Refine simulated images using a SimGAN trained on real galaxy morphology:
 | `prep_gan_data.py` | Prepare training data for SimGAN |
 | `train_simgan.py` | SimGAN training: refiner + PatchGAN discriminator |
 | `refine_dataset.py` | Apply trained refiner to create refined dataset |
+
+### Diagnostic GAN (sim-vs-real feedback)
+
+| File | Purpose |
+|------|---------|
+| `gan_plan.md` | Staged plan: train a discriminator to find where the simulator disagrees with real JWST data |
+| `gan/` | Diagnostic GAN code (data prep, audits, PCA baseline, slurm scripts) |
 
 ### ML Training
 

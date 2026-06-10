@@ -406,6 +406,14 @@
         simulated images live in the same parameter and observational distribution as real JWST
         cutouts while preserving the lensing signal.
       </p>
+      <p class="subtitle" style="border-left:4px solid #d29922;padding-left:.8em;">
+        <strong>Superseded notice (2026-06-09):</strong> this document targets <code>simulate_v3</code> and an
+        image-refinement goal. The working plan is now <a href="gan_plan.md"><code>gan_plan.md</code></a> (diagnostic
+        discriminator), and the colleague's simulator has advanced to v8 (single real-scene architecture,
+        <code>simulate_v8.py</code>) and v9 (<code>v9_consistent/</code>, photometry-consistent lens mass). Several concerns
+        raised here &mdash; the centered-lens shortcut, synthetic backgrounds, flat arc SEDs &mdash; were since
+        fixed or made moot by v6&ndash;v9; see the &ldquo;UPDATE 2026-06-09&rdquo; section of <code>gan_plan.md</code>.
+      </p>
       <nav>
         <a href="#bottom-line">Bottom line</a>
         <a href="#simulator">What v3 gives us</a>

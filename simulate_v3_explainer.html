@@ -111,6 +111,21 @@ h3.sub{margin:1.45rem 0 .8rem;color:var(--text);font-size:1.05rem;}
   <div style="margin-top:.8rem;">
     <span class="badge">JWST NIRCam</span><span class="badge">Gravitational Lensing</span><span class="badge">lenstronomy</span><span class="badge">COWLS-calibrated</span><span class="badge">Python 3</span><span class="badge">980 lines</span>
   </div>
+  <div class="callout callout-warn" style="margin-top:1rem;margin-bottom:0;">
+    <div class="callout-icon">&#9888;&#65039;</div>
+    <div class="callout-body">
+      <h5>Update 2026-06-09 &mdash; simulate_v3 has been superseded</h5>
+      <p style="margin-bottom:.5rem;">This explainer still describes <code>simulate_v3.py</code> accurately, but the colleague's repo has since moved through <strong>v4 &rarr; v6 &rarr; v7 &rarr; v8 &rarr; v9_consistent</strong> (merged 2026-06-09). The biggest shift is in <code>simulate_v8.py</code>: instead of stitching a synthetic lens onto a separate background (the v3 approach explained below), each v8 sample is <em>one real 630&times;630 JWST cutout</em> with only the lensed arcs simulated on top. <code>v9_consistent/</code> then ties the lens mass (&sigma;<sub>v</sub>) to the cutout's own photometry via a Faber&ndash;Jackson relation, fixing the v8 mass&ndash;light inconsistency.</p>
+      <p style="margin-bottom:.5rem;"><strong>Bugs fixed since this document was written</strong> (relevant when reading the v3 code below, and as known "tells" for the diagnostic GAN):</p>
+      <ul style="margin:0 0 .5rem 1.1rem;">
+        <li><strong>v6 augmentation:</strong> stamp rotation/flip was drawn per band, giving the same galaxy different orientations across the 4 bands (non-physical). Now decided once per system.</li>
+        <li><strong>v8 source SED:</strong> star-forming color ratios were computed but never applied &mdash; arcs were colorless. Now arcs carry the Lyman-break/Balmer-break SED described in Section 5 of this page.</li>
+        <li><strong>v8 scene pool:</strong> stars (diffraction spikes) leaked in as central "lens galaxies"; removed via a compactness cut.</li>
+        <li><strong>v8 duplicates:</strong> non-lensed images could be pixel-identical; scenes are now sampled without replacement.</li>
+      </ul>
+      <p style="margin-bottom:0;">Output naming changed in v8+: <code>sources_{band}.npy</code> &rarr; <code>arcs_{band}.npy</code> (plus <code>galaxies_{band}.npy</code> for the untouched real scene). See <a href="gan_plan.md" style="color:var(--accent);">gan_plan.md</a> (&ldquo;UPDATE 2026-06-09&rdquo; section) for how this changes the GAN feedback plan.</p>
+    </div>
+  </div>
 </header>
 
 <nav id="main-nav">

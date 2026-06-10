@@ -6,6 +6,44 @@ Author note: this plan replaces the recommendation in [gan_architecture_proposal
 
 ---
 
+## UPDATE 2026-06-09 — colleague's v4–v9 work merged in
+
+We merged the colleague's branches from [agentic-cosmic-webb-sim](https://github.com/kvinneslandn-ML-AI/agentic-cosmic-webb-sim) (`v8` and `newest_version_physical_accuracy`). The merge was clean — no conflicts — because all of his work is in new files. The simulator has moved well past v3. **Read this section before acting on the rest of the plan**, because some stages are now easier, some are moot, and the colleague's own bug fixes give us free validation data.
+
+### What the colleague built since v3
+
+| Version | File(s) | What changed |
+|---|---|---|
+| v4 | `simulate_v4.py`, `validate_f115w.py` | 630×630 images (18.9" FoV). SED color ratios recalibrated against real COWLS II photometry (440 lenses). Peak-matched amplitude calibration validated against a real lens. |
+| v5 | `prep_gan_data.py`, `train_simgan.py`, `refine_dataset.py` | **The colleague already wrote a SimGAN** (refiner + PatchGAN discriminator) for image refinement. Different goal than ours (his refines; ours diagnoses) but the PyTorch code is directly reusable reference, alongside `train_cvae.py`. |
+| v6 | `simulate_v6.py`, `prep_stamps_v6.py` | Real galaxy stamps (INTERPOL) replace Sersic profiles for lens + source light — same idea as v3's stamps, rebuilt. |
+| v7 | `simulate_v7.py`, `prep_vela_v7.py` | Source light replaced by 20,421 stamps from VELA hydrodynamic simulations. |
+| v8 | `simulate_v8.py`, `prep_scenes_v8.py`, `prep_lenses_v8.py` | **Architectural rethink.** No more stitching of separate lens + background cutouts: each sample is ONE real 630×630 JWST cutout ("scene"); the lens galaxy at its center is untouched real pixels. Only the lensed arcs are simulated and added on top. The commit message says this "eliminates all prior artifacts: force fields, chunky halos, noise doubling, visible boxes." |
+| v9 | `v9_consistent/simulate_v9_consistent.py` + helpers | **Physical consistency fix.** In v8, lens *appearance* (a real cutout) and lens *mass* (σ_v drawn independently from a TruncNorm) were unrelated — a faint dwarf could get σ_v = 320 km/s. v9 derives σ_v from the cutout's own F115W/F150W/F277W photometry via a Faber–Jackson relation (calibrated on DESI×JWST galaxies, using measured DESI σ_v where available), with a 0.4-dex inter-band consistency rejection and stratified θ_E sampling. |
+
+### Bugs the colleague fixed (and what they mean for us)
+
+These are exactly the kinds of "tells" our diagnostic discriminator is designed to find. He found four of them by eye/inspection; our job is to find the ones that are left.
+
+| Fix (commit) | The bug | Why a discriminator would have caught it |
+|---|---|---|
+| v6 augmentation (`a05385b`) | Stamp rotation/flip was drawn *per band*, so the same galaxy had a different orientation in each of the 4 bands. Real galaxies have one orientation at all wavelengths. | A 4-channel D learns cross-band morphology cues immediately — this was a trivial giveaway. |
+| v8 source SED (`b6eb344`) | `starforming_color_ratios()` was computed per system but **never applied** — arcs had identical flux in every band (flat, colorless SED). After the fix, arcs show the Lyman-break dropout and Balmer break, i.e. realistic orange/red lens-arc colors. | Color (band-ratio) cues are the first thing a multi-band D keys on. |
+| v8 star contamination (`59173a8`) | Stars (with JWST 6-point diffraction spikes) passed the brightness/concentration filter and ended up as "lens galaxies" at scene centers. Fixed with a compactness cut (flux(r<3)/flux(r<15) in F444W, threshold 0.35; scene pool 78 → 46). | A star posing as a lens with arcs around it is unphysical; D would flag those scenes. |
+| v8 duplicate non-lensed images (`9d71afa`) | Non-lensed samples drew scenes *with replacement* — 8 of 25 non-lensed images were pixel-identical duplicates. Fixed by sampling scene indices without replacement. | Duplicates leak between train/test splits and inflate any classifier metric — this validates our Section 9.3 rule: **split by scene/stamp ID, never randomly**. |
+
+### How this changes the plan
+
+1. **Pick the diagnostic target deliberately.** This plan was written against `simulate_v3`. The colleague's current best is v8/v9. To give him useful feedback, run the pipeline against **v8 or v9 output** (the thing he'd act on). The v3 analysis remains the worked example in the text below; the architecture transfers unchanged except where noted.
+2. **Stage 1 (jitter + shortcut elimination) is moot for v8+.** In v8 the background and lens are real pixels — there is no "centered synthetic lens" shortcut and no synthetic background for D to key on (Risk 8.2 disappears). The only simulated pixels are the arcs, so D's attention (Stage 4 heatmaps) should concentrate on arcs and their seams with the real scene. That is a sharper diagnostic, not a weaker one.
+3. **File renames (v8+):** the arc-only ground truth is `arcs_{band}.npy`, not `sources_{band}.npy` (`c6aebcf`). Per-band outputs are `images_{band}.npy` (composite), `galaxies_{band}.npy` (real scene only), `arcs_{band}.npy` (simulated arcs only). Our `build_arc_mask()` and dataset code must read `arcs_*` when targeting v8/v9.
+4. **Image size is 630×630 in v8/v9** (vs 125/224 in v3). The PatchDiscriminator in Section 3 needs ~2 extra stride-2 blocks (or train on random 224 crops, which also augments). Update the Section 9 open question accordingly.
+5. **Free validation of our pipeline (recommended first experiment):** the colleague's fixed bugs give us before/after datasets. Generate a small pre-fix dataset (e.g. `git checkout cc6ce01 -- simulate_v8.py`, run, restore) and a post-fix one; our Stage 2 D should separate pre-fix sims from real *easily* (flat-SED arcs) and post-fix sims less easily. If D can't catch a bug we *know* was there, the pipeline isn't ready to hunt unknown bugs.
+6. **New Stage 4 hypothesis from v9:** v8's mass–light inconsistency is visible in images as "arc radius (θ_E) uncorrelated with lens-galaxy brightness." Add `D_score vs (θ_E, lens scene brightness)` to the Stage 5.3 parameter-correlation list; comparing D on v8 vs v9 output tests whether the Faber–Jackson fix closed a real gap.
+7. **Feedback deliverable for the colleague** now has a concrete shape: (a) confirmation that the four fixed bugs are no longer detectable by D; (b) ranked list of *remaining* detectable differences (heatmaps + parameter correlations); (c) for v9 specifically, whether the σ_v↔photometry consistency improved D-resistance relative to v8.
+
+---
+
 ## 0. Why this plan looks different from the HTML proposal
 
 The HTML's top recommendation is *Architecture A — Parameter-Calibrated Simulator + Residual SimGAN*. It proposes a small neural network (an MLP) to learn good values for `lens_center_x`, `lens_center_y`, `source_offset`, crop offset, etc. That is overkill for our situation:
@@ -68,7 +106,7 @@ There's existing PyTorch code you can read for reference: [train_cvae.py](train_
 Per the audit in [simulate_v3.py](simulate_v3.py) and [Summary.txt](Summary.txt):
 
 - `output/v3/images_{F115W,F150W,F277W,F444W}.npy`, shape `(N, 125, 125)` (or `(N, 224, 224)` with `--size 224`). Float32. Units: simulator-internal flux (`sim_units`). Includes lens light + lensed arcs + Poisson noise + real background patch.
-- `output/v3/sources_{band}.npy` — same shape, **arc-only** (no lens light, no background). This is our physics ground-truth mask: we know exactly which pixels carry the lensing signal. We will weight loss heavily on these pixels so the GAN cannot "fix" the arcs out of existence.
+- `output/v3/sources_{band}.npy` — same shape, **arc-only** (no lens light, no background). This is our physics ground-truth mask: we know exactly which pixels carry the lensing signal. We will weight loss heavily on these pixels so the GAN cannot "fix" the arcs out of existence. (In v8+ this file is named `arcs_{band}.npy` — see the merge update section above.)
 - `output/v3/lensed.npy`, `theta_Es.npy`, `z_lens.npy`, `z_source.npy`, `masses.npy` — scalar metadata per image.
 - `output/v3/metadata.json` — parameter distributions used.
 
@@ -615,7 +653,7 @@ Listed roughly in order of likely impact.
 
 These are decisions that don't change the structure of the plan, but you'll need to answer Stage 0:
 
-1. **Image size.** [simulate_v3.py](simulate_v3.py) supports both 125 and 224 with `--size`. Larger is more diagnostic (more context per cutout). Pick one and stick with it. **Recommendation: 224**, because [Summary.txt](Summary.txt) Upgrade 2 already flagged 125 as too tight for the larger lens systems.
+1. **Image size.** [simulate_v3.py](simulate_v3.py) supports both 125 and 224 with `--size`. Larger is more diagnostic (more context per cutout). Pick one and stick with it. **Recommendation: 224**, because [Summary.txt](Summary.txt) Upgrade 2 already flagged 125 as too tight for the larger lens systems. **Post-merge note:** v8/v9 output is 630×630; if targeting those, either add ~2 stride-2 blocks to D or train on random 224-pixel crops of the 630 images (the crop doubles as augmentation).
 2. **How many sim images.** Stage 1 says ~30k to match real. With multiprocessing on Perlmutter that's ~1 hour. Cheap.
 3. **Train/val/test split.** Split *by background patch ID* and *by source/lens stamp ID*, not by random image. Otherwise the same lens light or background appears in both train and test, leaking.
 4. **Whether to include non-lensed sims (`lensed=0`) in training.** Probably yes — D should learn that "non-lensed sim" looks more like "random real" than "lensed sim" does. Useful sanity check.
