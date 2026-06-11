@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GAN design for the v8/v9 simulator — what to build now</title>
+<title>The proposal: a discriminator-readout suite for Nate's v13-era data</title>
 <style>
 :root{--bg:#0d1117;--surface:#161b22;--surface-2:#1c2128;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--yellow:#d29922;--purple:#bc8cff;--red:#f85149;--orange:#ffa657;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.6;padding-bottom:4rem;}
 header{background:var(--surface);border-bottom:1px solid var(--border);padding:2rem 2.5rem;}
 header h1{font-size:clamp(1.4rem,1.6vw,1.9rem);color:var(--accent);margin-bottom:.35rem;}
-header p{color:var(--muted);max-width:80ch;}
+header p{color:var(--muted);max-width:85ch;}
 .badge{display:inline-block;background:#21262d;border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:.75rem;margin:.25rem .25rem 0 0;color:var(--muted);}
 nav{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:.6rem 2.5rem;z-index:10;display:flex;flex-wrap:wrap;gap:.4rem;}
 nav a{color:var(--muted);text-decoration:none;font-size:.82rem;padding:.25rem .6rem;border:1px solid transparent;border-radius:6px;}
@@ -38,232 +38,165 @@ tr:nth-child(even){background:var(--surface-2);}
 .risk{background:var(--yellow);color:#0d1117;}
 .later{background:var(--purple);}
 .avoid{background:var(--red);}
-.flow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:center;margin:14px 0;}
-.node{min-height:64px;border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:10px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:.82rem;}
-.arrow{text-align:center;color:var(--muted);font-weight:900;}
+.big{font-size:1.6rem;font-weight:800;color:var(--accent);}
 .muted{color:var(--muted);}
 ul,ol{margin:0 0 .8rem 1.4rem;}
 li{margin-bottom:.35rem;}
-@media (max-width:900px){.flow{grid-template-columns:1fr;}.arrow{transform:rotate(90deg);}}
 </style>
 </head>
 <body>
 <header>
-  <h1>GAN design for the v8/v9 simulator — what to build now</h1>
-  <p><strong>Complete rewrite, 2026-06-09.</strong> The previous version of this document surveyed six architectures for adapting the <em>v3</em> simulator and recommended a parameter-calibration MLP + residual SimGAN. All of that is obsolete: the simulator is now v8/v9 (one real JWST scene per sample, only the arcs simulated), Nate has <em>already built and run</em> a refiner SimGAN (<code>train_simgan.py</code>), and our goal is diagnostic feedback, not image refinement. The old document survives in git history (<code>git show 319b077:gan_architecture_proposals.html</code>).</p>
+  <h1>The proposal: a discriminator-readout suite for Nate's v13-era data</h1>
+  <p><strong>Rewritten 2026-06-10 after discovering the v13 datasets on NERSC.</strong> Previous versions of this document weighed multiple competing architectures (2026-06-05), then multiple competing datasets (2026-06-09). Both choices are now settled by facts on disk: Nate has already generated <strong>6,961 simulated systems (141&nbsp;GB) on ~400 real scenes</strong> at <code>/global/cfs/projectdirs/deepsrch/natekv/</code>. This is now <strong>one proposal</strong> — a small discriminator plus an interpretability readout — executed as several ideas against that data. Older versions survive in git history.</p>
   <div style="margin-top:.8rem;">
-    <span class="badge">v8 / v9 era</span><span class="badge">discriminator-first</span><span class="badge">4-band PatchGAN</span><span class="badge">dataset design &gt; architecture</span><span class="badge">Rewritten 2026-06-09</span>
+    <span class="badge">v13 era</span><span class="badge">one proposal, seven ideas</span><span class="badge">6,961 sims ready on CFS</span><span class="badge">no sim generation needed</span><span class="badge">Rewritten 2026-06-10</span>
   </div>
 </header>
 
 <nav>
   <a href="#bottom-line">Bottom line</a>
+  <a href="#data">The new data</a>
   <a href="#what-changed">What changed</a>
-  <a href="#simgan-postmortem">Nate's SimGAN postmortem</a>
-  <a href="#central-question">The central question</a>
-  <a href="#options">Data options A–E</a>
-  <a href="#scene-bottleneck">The 46-scene bottleneck</a>
-  <a href="#architecture">Recommended build</a>
+  <a href="#build">The build</a>
+  <a href="#ideas">Ideas 1–7</a>
   <a href="#tells">Predicted tells</a>
-  <a href="#roadmap">Roadmap</a>
+  <a href="#risks">Risks</a>
+  <a href="#roadmap">Roadmap &amp; asks</a>
 </nav>
 
 <main>
 
 <section id="bottom-line">
   <h2>Bottom line</h2>
-  <p><span class="rec">RECOMMENDED</span>&nbsp; Build a <strong>discriminator, not another refiner</strong>: a small 4-band PatchGAN classifier with spectral normalization and hinge loss, plus an interpretability layer (patch heatmaps, per-band ablations, parameter correlations). The discriminator's <em>explanation</em> of how it tells sim from real is the feedback deliverable for Nate.</p>
-  <p>But in the v8 era, <strong>the choice of comparison dataset matters more than the network architecture</strong>. v8 images are ~99% real pixels; the only simulated content is the lensed arcs. Choose the wrong "real" set and your discriminator becomes a trivial arc detector that teaches you nothing. The primary recommendation:</p>
+  <p><span class="rec">THE PROPOSAL</span>&nbsp; Train one small <strong>4-band patch discriminator</strong> (spectral norm, hinge loss, &le;3M params, patch-score heatmaps) and one fixed <strong>readout suite</strong> (heatmaps, per-band ablations, metadata correlations), then run that identical machinery through seven experiments ("ideas") on Nate's ready-made datasets. The discriminator's <em>explanation</em> of how it separates sim from real is the deliverable.</p>
+  <p>Two things flipped since the last rewrite:</p>
+  <ul>
+    <li><strong>The data famine is over.</strong> We planned around a 92-image cap; there are now 6,961 systems (2,500 + 3,650 lensed, plus 811 non-lensed) sitting on CFS — roughly <strong>75&times; more</strong> than the cap, with far richer metadata. We no longer generate sims; we consume them.</li>
+    <li><strong>The binding constraint moved.</strong> The scene library switched from COSMOS-Web to <strong>JADES</strong> (GOODS-N/S), while the only sizable real-lens sample (COWLS, 440 systems) is COSMOS-Web. Handling that <em>survey gap</em> — not network architecture, not dataset size — is now the hard part. Idea 2 measures it; Idea 1 works around it.</li>
+  </ul>
+</section>
+
+<section id="data">
+  <h2>The new data — what is actually on disk</h2>
+  <p>Two complete datasets under <code>/global/cfs/projectdirs/deepsrch/natekv/</code>, both produced by the <code>v9_consistent</code> simulator lineage (the code in this repo at <code>v9_consistent/simulate_v9_consistent.py</code>), differing in scene-prep version and run configuration. Numbers below verified directly against the arrays.</p>
+  <table>
+    <tr><th></th><th><code>v9_consistent_4050/</code></th><th><code>v13_consistent/</code></th></tr>
+    <tr><td>Generated</td><td>May 19</td><td>May 21</td></tr>
+    <tr><td>Systems</td><td><strong>4,050</strong> = 3,650 lensed + 400 non-lensed</td><td><strong>2,911</strong> = 2,500 lensed + 411 non-lensed</td></tr>
+    <tr><td>Renders</td><td>1 per system (18.9&Prime; FoV)</td><td><strong>2 per system</strong>: full FoV <em>and</em> a lens-centered <code>_zoom</code> re-render (same 630&sup2; grid, verified different pixels, same metadata)</td></tr>
+    <tr><td>Scene library</td><td>400 JADES DR5 ellipticals (32 with measured DESI &sigma;_v, 368 Faber&ndash;Jackson)</td><td>"v13 unified": JADES DR5 both fields + DESI calibration galaxies; ~396 unique scenes in use</td></tr>
+    <tr><td>&theta;_E realized</td><td>0.50&ndash;1.54&Prime;, stratified bins (bins &gt;1.54&Prime; empty)</td><td>0.50&ndash;1.69&Prime;</td></tr>
+    <tr><td>Size on disk</td><td>72 GB</td><td>69 GB</td></tr>
+    <tr><td>Docs</td><td><code>README_DATASET.md</code> (good — read it)</td><td><code>metadata.json</code> only</td></tr>
+  </table>
+  <p style="margin-top:1rem;"><span class="big">92 &rarr; 9,872</span><br><span class="muted">images per band: what we planned around (the v8 cap) vs. what is on disk now (4,050 + 2,911 + 2,911 zoom). Scene variety: 46 &rarr; ~400.</span></p>
+
+  <h3>Per system (all <code>float32 (N, 630, 630)</code>, 4 bands, memory-map these)</h3>
+  <ul>
+    <li><code>images_&lt;band&gt;.npy</code> — final composite (real scene + arcs + noise); <code>images_&lt;band&gt;_zoom.npy</code> in v13.</li>
+    <li><code>arcs_&lt;band&gt;.npy</code> — noiseless arc-only layer. Doubles as a perfect arc mask <em>and</em> lets us rescale arc flux or re-draw noise at training time (the README explicitly invites this — see Idea 5).</li>
+    <li><code>galaxies_&lt;band&gt;.npy</code> — the untouched real JADES scene. <code>images &asymp; galaxies + arcs + noise</code>, i.e. <strong>exact with/without pairs</strong> for every lensed sim (Idea 3).</li>
+  </ul>
+  <h3>Per-system metadata (the readout suite's fuel)</h3>
+  <p><code>theta_Es</code>, <code>z_lens</code> (JADES photo-z / DESI spec-z), <code>z_source</code> (VELA-native in v13), <code>sigma_v</code> consensus + per-band FJ predictions (<code>sigma_v_F115W/150/277</code>), per-band lens AB magnitudes (<code>photom_*</code>), <code>einstein_mass_msun</code>, <code>lensed</code>, <code>completed_mask</code> (all complete). One gap: <strong>no <code>scene_idx</code> array</strong> — scene identity must be reconstructed by grouping on the per-scene photometry values (works, since photometry is identical for all sims sharing a scene), or asked for (see asks).</p>
   <div class="callout callout-success">
-    <div class="callout-icon">&#127919;</div>
+    <div class="callout-icon">&#9989;</div>
     <div class="callout-body">
-      <h5>Primary experiment</h5>
-      <p>Compare <strong>v8/v9 lensed sims</strong> against <strong>real lens cutouts extracted at the 440 COWLS catalogue positions</strong> (Option B below) — both classes then contain a lens galaxy plus arcs, so the discriminator is forced to judge whether the <em>arcs look real</em>, which is the only thing v8 actually simulates. Run Option C (a null test that should score ~50%) alongside it as a unit test of your data pipeline.</p>
+      <h5>What this buys us, concretely</h5>
+      <p>Every "grow the data" item from the previous rewrite is done, by Nate: lensed-heavy generation exists (<code>--lensed/--nonlensed</code> flags — no patch needed), the scene pool is ~400 (not 46), and the per-band &sigma;_v/photometry metadata makes the parameter-correlation readout far sharper than we planned. The 811 non-lensed "sims" are untouched real JADES cutouts — a free real pile for controls.</p>
     </div>
   </div>
 </section>
 
 <section id="what-changed">
-  <h2>What changed since the old proposals</h2>
+  <h2>What changed since the 2026-06-09 rewrite</h2>
   <table>
-    <tr><th>Old assumption (v3 era)</th><th>Reality now (v8/v9, merged 2026-06-09)</th></tr>
-    <tr><td>The simulator renders a synthetic lens galaxy and synthetic background; a GAN must fix their textures.</td><td>The lens galaxy, neighbors, background and noise are <strong>one untouched real JWST cutout</strong>. There are no synthetic textures left to fix except the arcs.</td></tr>
-    <tr><td>The "centered lens" shortcut must be patched with jittering before any GAN training.</td><td>Moot. The scene's galaxy is real and sits wherever it sits. (A subtler version survives: the <em>mass model</em> is pinned to (0,0) — see <a href="#tells">tells</a>.)</td></tr>
-    <tr><td>A refiner SimGAN is novel here and worth proposing.</td><td>Nate already built one (<code>train_simgan.py</code>, v5). Proposing it again is redundant; learning from it is not — see the postmortem.</td></tr>
-    <tr><td>Goal: refined images for downstream classifier training.</td><td>Goal (set 2026-05-26): <strong>diagnostic feedback</strong>. We want to tell Nate <em>where and why</em> his sims differ from real data, with evidence.</td></tr>
-    <tr><td>Sim datasets can be made arbitrarily large.</td><td>The v8 scene pool has <strong>46 scenes</strong> and <code>simulate_v8.py</code> caps at <code>--n 92</code>. Dataset size is the binding constraint (see <a href="#scene-bottleneck">bottleneck</a>).</td></tr>
+    <tr><th>Then (v8/v9, 2026-06-09)</th><th>Now (v13 era, verified on CFS)</th></tr>
+    <tr><td>46 scenes; 92-image cap; we must extract 242 COSMOS scenes and patch in a lensed-only flag.</td><td>~400 JADES scenes; 6,150 lensed sims on disk; the flag already exists. <strong>Both work items are moot.</strong></td></tr>
+    <tr><td>Scenes were COSMOS-Web — same survey as the COWLS real lenses.</td><td>Scenes are <strong>JADES GOODS-N/S</strong> (deeper, different noise realization). Sim-vs-COWLS now carries a <em>survey signature</em> a discriminator can cheat on. New top risk; Ideas 1–2 address it.</td></tr>
+    <tr><td>Five competing data options (A–E) to choose from.</td><td>One proposal; the useful parts of A–E survive as Ideas 1–4 run with the same build.</td></tr>
+    <tr><td>Arc-centered crops (old Option E) were a fallback we'd have to build.</td><td>v13 ships lens-centered <code>_zoom</code> re-renders of every system — Nate effectively pre-built the zoomed view (Idea 4).</td></tr>
+    <tr><td>Our six predicted tells were private code-reading notes.</td><td>The v9-4050 README's "What's NOT in this dataset" section <strong>independently confirms three of them</strong> (fixed ellipticity/shear, fixed 0.25 flux ratio, PSF treatment mismatch). The discriminator's job is to rank them and find the rest.</td></tr>
   </table>
 </section>
 
-<section id="simgan-postmortem">
-  <h2>Nate's SimGAN: what it was, and what to take from it</h2>
-  <p>Facts, from reading <code>train_simgan.py</code> and <code>prep_gan_data.py</code>:</p>
-  <ul>
-    <li><strong>Architecture:</strong> ResNet refiner (~3.3M parameters, InstanceNorm, input + learned perturbation) against a 70&times;70 PatchGAN discriminator (~2.8M parameters).</li>
-    <li><strong>Loss:</strong> LSGAN (least-squares) + an L1 "self-regularization" term tying the refined image to the original, with a Gaussian-blur variant for structural preservation.</li>
-    <li><strong>Data:</strong> 128&times;128 <em>isolated-galaxy</em> crops — center crops of sim galaxy-only images vs. brightest-galaxy crops cut from real background patches with local background subtracted. A deliberate design so the discriminator judged galaxy morphology, not background or brightness.</li>
-  </ul>
-  <h3>Why not continue down this road</h3>
-  <ol>
-    <li><strong>The problem it attacked no longer exists.</strong> It refined <em>synthetic lens-galaxy morphology</em> (the v4-era weakness). v8 made the lens galaxy real by construction. Refining real pixels can only corrupt them.</li>
-    <li><strong>A refiner's output is the wrong deliverable.</strong> A refined image silently papers over simulator flaws; it cannot tell Nate what was wrong. A discriminator that is <em>read out</em> (heatmaps, ablations, correlations) produces the feedback itself.</li>
-    <li><strong>Whole-image refinement is mismatched to v8</strong>, where the only simulated pixels are arcs. If a generator ever returns to the plan, it must be masked to the arc footprint (<code>arcs_{band}.npy</code> is a perfect mask) — see <a href="#architecture">Stage 3</a>.</li>
-  </ol>
-  <div class="callout callout-physics">
-    <div class="callout-icon">&#9851;&#65039;</div>
-    <div class="callout-body">
-      <h5>What to salvage</h5>
-      <p>His PatchGAN discriminator is a sound skeleton — keep the patch-output idea, swap LSGAN for hinge loss + spectral norm (more stable, standard in modern GANs). His data-design instinct — <em>make both classes identical except for the thing under test</em> — is exactly the principle that drives the dataset options below. And his isolated-crop preprocessing is reusable for Option E.</p>
-    </div>
-  </div>
-</section>
-
-<section id="central-question">
-  <h2>The central question: what "real" data are you comparing against?</h2>
-  <p>This is the part to think hardest about, so here it is from first principles.</p>
-  <p>A discriminator learns <em>any</em> systematic difference between its two input piles. It has no idea which differences you care about. Your job in dataset design is to make sure the <strong>only</strong> systematic difference between pile A (sim) and pile B (real) is the thing you want tested — the realism of the simulated arcs.</p>
-  <p>Two v8 facts make this tricky:</p>
-  <ul>
-    <li><strong>Fact 1: v8 non-lensed images are bit-identical to real data</strong> (the scene cutout with nothing added). "Sim vs real" is meaningless for them — they <em>are</em> real. Only lensed images contain simulated pixels.</li>
-    <li><strong>Fact 2: real lenses are astronomically rare.</strong> A random COSMOS-Web cutout essentially never contains a strong lens. So if pile A = lensed sims and pile B = random real cutouts, the discriminator wins by answering "are there arcs?" — it becomes a <em>lens detector</em>, scores ~100%, and tells you precisely nothing about whether Nate's arcs are realistic.</li>
-  </ul>
-  <div class="callout callout-danger">
-    <div class="callout-icon">&#10060;</div>
-    <div class="callout-body">
-      <h5>The confound, in one sentence</h5>
-      <p>In v8, "simulated" and "contains arcs" are perfectly correlated — so any sim-vs-real comparison where the real pile lacks arcs measures arc <em>presence</em>, not arc <em>realism</em>. Every option below is a different strategy for breaking that correlation.</p>
-    </div>
-  </div>
-</section>
-
-<section id="options">
-  <h2>Data options, in detail</h2>
-
-  <h3>Option A — Lensed sims vs. random real cutouts &nbsp;<span class="rec avoid">SMOKE TEST ONLY</span></h3>
+<section id="build">
+  <h2>The build (fixed across all ideas)</h2>
   <table>
-    <tr><th>Sim pile</th><td><code>output/v8/images_*</code> where <code>lensed == 1</code></td></tr>
-    <tr><th>Real pile</th><td>Random 630&times;630 (or 224) 4-band cutouts from <code>raw_data/1727_mosaic/</code> — the script <code>gan/data/prep_real_targets.py</code> already does this</td></tr>
-    <tr><th>Pros</th><td>Unlimited real data (the mosaics are on NERSC disk); zero new code.</td></tr>
-    <tr><th>Cons</th><td>The fatal confound above: D learns "arcs &rArr; fake." Also scene cutouts are <em>centered on bright ellipticals</em> while random cutouts are not — a second free giveaway.</td></tr>
-    <tr><th>Use it for</th><td>A pipeline smoke test only: if D <em>fails</em> to reach ~100% here, something is broken in your loading/normalization. Never report its accuracy as a realism result.</td></tr>
-  </table>
-
-  <h3>Option B — Lensed sims vs. real COWLS lens cutouts &nbsp;<span class="rec">PRIMARY</span></h3>
-  <table>
-    <tr><th>Sim pile</th><td>v8 (and separately v9) lensed images</td></tr>
-    <tr><th>Real pile</th><td>4-band cutouts extracted from the same DR0.5 mosaics at the coordinates of real lens candidates. <code>cowls_catalogue.csv</code> (in this repo) has 440 systems with <code>ra</code>, <code>dec</code>, Einstein radius, and per-band lens <em>and source</em> magnitudes — everything needed. Requires one new script (<code>prep_cowls_cutouts.py</code>: WCS &rarr; pixel positions &rarr; cutouts; ~an afternoon, modeled on <code>prep_scenes_v8.py</code>).</td></tr>
-    <tr><th>Why it's right</th><td>Both piles now contain a central elliptical <em>with arcs around it</em>, drawn from the same instrument, depth, and reduction. The arc-presence shortcut is gone; the discriminator must judge arc morphology, color, noise texture, and lens-arc consistency — exactly Nate's simulated content.</td></tr>
-    <tr><th>Cons &amp; mitigations</th><td>Only ~440 real systems, of mixed confidence — small for ML. Mitigate with: (1) a <em>small</em> D and patch-level training (each 630px image yields hundreds of receptive-field patches); (2) dihedral augmentation (8&times;); (3) k-fold cross-validation instead of a single split; (4) match or stratify theta_E between piles using the catalogue's <code>einstein_radius</code> column so D can't key on arc-radius distribution differences; (5) optionally restrict to the higher-confidence subset and treat the rest as a validation pool.</td></tr>
-    <tr><th>What a win means</th><td>If D separates the piles, its heatmaps point at <em>what</em> looks wrong (arc edges? colors? noise?), and its score correlations against <code>theta_Es.npy</code>, <code>z_source.npy</code>, scene ID, etc. point at <em>which regime</em> is wrong. That is the feedback report.</td></tr>
-  </table>
-
-  <h3>Option C — Non-lensed sims vs. scene-style real cutouts &nbsp;<span class="rec risk">CONTROL / UNIT TEST</span></h3>
-  <table>
-    <tr><th>Sim pile</th><td>v8 non-lensed images (= the 46 scenes, untouched)</td></tr>
-    <tr><th>Real pile</th><td>A <em>held-out</em> set of cutouts selected by the same rules as the scene pool (elliptical-centered, brightness + compactness filters) but at different sky positions</td></tr>
-    <tr><th>The point</th><td>By construction both piles are 100% real JWST data, so a correct pipeline yields D accuracy &asymp; 50% (coin-flip). If D scores above chance here, your <em>preprocessing</em> differs between piles (normalization, crop logic, dtype, background handling) — a bug in your code, not Nate's. This is a free unit test; run it before believing any other number.</td></tr>
-    <tr><th>Cost</th><td>Reuses <code>prep_scenes_v8.py</code> logic with a position exclusion list. Cheap.</td></tr>
-  </table>
-
-  <h3>Option D — Paired injection test: same scene, with vs. without arcs &nbsp;<span class="rec risk">ARTIFACT PROBE</span></h3>
-  <table>
-    <tr><th>Sim pile</th><td>Lensed images (scene + injected arcs)</td></tr>
-    <tr><th>Real pile</th><td>The <em>same scenes</em>, no injection (<code>galaxies_{band}.npy</code> gives you exact pairs)</td></tr>
-    <tr><th>The point</th><td>Backgrounds are pixel-identical across piles, so the only learnable signal is the injection itself: the arc pixels and their seam. D <em>will</em> win (arcs are present vs. absent) — the value is not the accuracy but the <strong>heatmaps and saliency</strong>: if D's attention falls on the arc <em>boundary</em> or on noise texture rather than arc shape, that localizes injection artifacts (Poisson-only noise, PSF mismatch, flux calibration) with surgical precision.</td></tr>
-    <tr><th>Cons</th><td>Cannot say whether arcs resemble <em>real</em> arcs (no real lens ever enters); it tests internal consistency only. Pair it with Option B, never instead of.</td></tr>
-  </table>
-
-  <h3>Option E — Arc-centered crops: sim arcs vs. real arcs &nbsp;<span class="rec later">REFINEMENT OF B</span></h3>
-  <table>
-    <tr><th>Sim pile</th><td>Small crops (e.g. 96&ndash;128 px) centered on simulated arc segments, located via <code>arcs_{band}.npy</code></td></tr>
-    <tr><th>Real pile</th><td>Crops at the arc radius (from catalogue <code>einstein_radius</code>) around real COWLS lenses</td></tr>
-    <tr><th>The point</th><td>Concentrates all model capacity on the only simulated pixels; largely removes the 46-scene memorization risk because crops mostly exclude scene centers; multiplies the effective sample count (several crops per system).</td></tr>
-    <tr><th>Cons</th><td>Real arc positions are approximate (annulus, not exact mask); local brightness must be matched so D can't key on flux level alone. Adopt it if Option B overfits despite mitigations.</td></tr>
-  </table>
-
-  <h3>Decision summary</h3>
-  <table>
-    <tr><th>Option</th><th>Question it answers</th><th>Role</th></tr>
-    <tr><td><strong>B</strong> — sims vs. COWLS lenses</td><td>"Do Nate's arcs look like real arcs?"</td><td><strong>Primary experiment; the feedback comes from here</strong></td></tr>
-    <tr><td><strong>C</strong> — real vs. real null test</td><td>"Is my own data pipeline unbiased?"</td><td>Mandatory control, run first</td></tr>
-    <tr><td><strong>D</strong> — paired injection</td><td>"Where exactly are the injection artifacts?"</td><td>Artifact localization, second</td></tr>
-    <tr><td><strong>A</strong> — sims vs. random sky</td><td>"Does my code run?"</td><td>Smoke test only</td></tr>
-    <tr><td><strong>E</strong> — arc crops</td><td>Same as B, zoomed in</td><td>Fallback if B overfits</td></tr>
+    <tr><th>Input</th><td>4 stacked bands; random 224&times;224 crops of the 630px frames (augmentation + working scale). Fixed per-band <code>arcsinh</code> normalization with sky stats from the <em>real</em> pile — never per-image min-max.</td></tr>
+    <tr><th>Network</th><td>PatchGAN classifier: 4&ndash;5 stride-2 conv blocks (base 64), LeakyReLU(0.2), spectral norm everywhere, logit <em>map</em> output (heatmaps for free). &le;3M params — 440 real lenses is still the smallest pile in play.</td></tr>
+    <tr><th>Loss / protocol</th><td>Hinge loss. Split by <strong>scene</strong> (sims; ~6 sims share each scene — reconstruct scene IDs from photometry) and by <strong>system</strong> (reals); k-fold CV; PCA + logistic baseline first as the number to beat; class imbalance (6k sims vs 440 reals) handled by patch-level sampling and reweighting.</td></tr>
+    <tr><th>Readout</th><td>(i) patch heatmaps, (ii) per-band ablations, (iii) D-score correlations against <code>theta_Es</code>, <code>z_lens</code>, <code>z_source</code>, <code>sigma_v</code>, <code>photom_*</code>, <code>einstein_mass</code>, scene ID — the metadata is rich enough that "D wins" converts directly into "the simulator is wrong <em>here</em>."</td></tr>
   </table>
 </section>
 
-<section id="scene-bottleneck">
-  <h2>The 46-scene bottleneck &nbsp;<span class="rec risk">TOP FEEDBACK ITEM</span></h2>
-  <p>The v8 scene pool contains <strong>46 cutouts</strong> (78 candidates, minus star/brightness rejects), and because non-lensed samples must use unique scenes, <code>simulate_v8.py</code> cannot generate more than <strong>92 images per run</strong> (it errors above that). Three consequences:</p>
-  <ul>
-    <li><strong>Any network will memorize all 46 backgrounds.</strong> Always split train/test <em>by scene ID</em>, never randomly — otherwise the same real background appears on both sides and your accuracy is fiction.</li>
-    <li><strong>Lensed-only datasets can be larger</strong> (lensed sampling reuses scenes), but the background variety is still 46 — D can learn "one of the 46 backgrounds &rArr; sim". Option E mitigates; growing the pool cures.</li>
-    <li><strong>This is the single highest-value feedback for Nate</strong>, deliverable today without training anything: the scene pool needs to grow by 1&ndash;2 orders of magnitude (scan more mosaic positions, relax the isolation cut, or lean on the external catalogs he already pulled into <code>v9_consistent/</code> — the JADES DR5 ellipticals and <code>lens_scene_galaxies.csv</code> with ~1000 entries show he is aware).</li>
-  </ul>
-</section>
+<section id="ideas">
+  <h2>The ideas, in execution order</h2>
 
-<section id="architecture">
-  <h2>Recommended build, in order</h2>
-  <div class="flow">
-    <div class="node">Stage 0<br>PCA + logistic baseline</div>
-    <div class="arrow">&rarr;</div>
-    <div class="node">Stage 1<br>D-only PatchGAN classifier</div>
-    <div class="arrow">&rarr;</div>
-    <div class="node">Stage 2<br>Interpretability readout</div>
-    <div class="arrow">&rarr;</div>
-    <div class="node">Stage 3 (optional)<br>arc-masked refiner</div>
-  </div>
+  <h3>Idea 1 — Lensed sims vs. real COWLS lenses &nbsp;<span class="rec">PRIMARY</span></h3>
+  <p>6,150 lensed sims vs. 4-band cutouts at the 440 <code>cowls_catalogue.csv</code> positions (COSMOS-Web mosaics, already on disk; one extraction script). Both piles contain a lens galaxy with arcs, so D must judge <em>arc realism</em> — the only thing the simulator actually fabricates. <strong>New since v13: the survey gap.</strong> Sims sit on JADES pixels, reals on COSMOS-Web pixels; depth/noise differences are a cheat code for D. Mitigations, in order of strength: (a) subtract Idea 2's measured survey signature from any claimed result; (b) normalize per survey and match local-background statistics; (c) prefer arc-annulus crops that minimize background exposure; (d) the clean fix — ask Nate for one run on COSMOS scenes (his own <code>lens_scene_galaxies.csv</code> lists 242 COSMOS positions).</p>
 
-  <h3>Stage 0 — Classical baseline first (no neural nets)</h3>
-  <p>Run the existing <code>gan/baselines/pca.py</code> (PCA &rarr; logistic regression) on the Option B piles. The cross-validated accuracy is the number any neural network must beat; if PCA alone scores very high, inspect its top components — the answer may be linear and cheap. This mirrors Stage 0 of <a href="gan_plan.md" style="color:var(--accent);">gan_plan.md</a>.</p>
+  <h3>Idea 2 — Real-vs-real controls &nbsp;<span class="rec risk">MANDATORY, RUN FIRST</span></h3>
+  <p>Two null tests through the identical pipeline. <strong>(a) Pipeline honesty:</strong> the 811 non-lensed sims (= untouched real JADES cutouts, free from Nate's runs) vs. fresh JADES cutouts we extract — must score ~50% or our preprocessing is biased. <strong>(b) Survey signature:</strong> real JADES cutouts vs. real COSMOS-Web cutouts — deliberately <em>not</em> 50%; its accuracy quantifies the cheat available to Idea 1 and becomes the correction baseline. Cheap, decisive, zero training risk.</p>
 
-  <h3>Stage 1 — The discriminator (the deliverable)</h3>
-  <table>
-    <tr><th>Input</th><td>4 channels (F115W/F150W/F277W/F444W stacked), so color ratios are learnable. Random 224&times;224 crops of the 630px images (data augmentation + matches the PatchGAN's working scale); for Option E, 96&ndash;128px arc crops.</td></tr>
-    <tr><th>Normalization</th><td>Fixed per-band <code>arcsinh</code> stretch with sky statistics computed once from the <em>real</em> pile (<code>gan/data/normalize.py</code>). Never per-image min-max — it destroys the flux and color information you are testing.</td></tr>
-    <tr><th>Body</th><td>PatchGAN: 4&ndash;5 stride-2 conv blocks (base 64 channels), LeakyReLU(0.2), <strong>spectral normalization</strong> on every conv. Output is a logit <em>map</em> (one score per ~70px patch), not a single number — this is what makes heatmaps free.</td></tr>
-    <tr><th>Loss</th><td>Hinge loss on raw logits (no sigmoid). More stable than BCE or Nate's LSGAN choice.</td></tr>
-    <tr><th>Size</th><td>Keep it small (&le; ~3M params). With ~440 real systems, capacity is the enemy; patch-level training and augmentation are the friends.</td></tr>
-    <tr><th>Protocol</th><td>Split by scene ID (sims) and by system (reals); k-fold CV; report mean&plusmn;std accuracy vs. the Stage 0 baseline. Run Option C's null test through the identical code path first.</td></tr>
-  </table>
+  <h3>Idea 3 — Paired injection probe &nbsp;<span class="rec risk">ARTIFACT LOCALIZER</span></h3>
+  <p><code>images</code> vs. <code>galaxies</code>: 6,150 exact with/without-arc pairs, backgrounds pixel-identical. D wins trivially (arcs present vs. absent) — the value is the <strong>heatmaps</strong>: attention on arc <em>boundaries</em> or noise texture rather than arc bodies localizes injection artifacts (Poisson-only noise seam, PSF mismatch — the latter now acknowledged in Nate's own README). At 6k pairs this is a precision instrument, not the toy it would have been at 92 images.</p>
 
-  <h3>Stage 2 — Make the discriminator talk</h3>
-  <ul>
-    <li><strong>Patch heatmaps</strong> (free): upsample the logit map over the image. Regions that consistently light up on sims are the localized sim-real disagreements.</li>
-    <li><strong>Per-band ablation:</strong> zero one band at a time, measure the accuracy drop &rarr; which band carries the tell &rarr; SED vs. morphology diagnosis.</li>
-    <li><strong>Parameter correlations:</strong> D score vs. <code>theta_E</code>, <code>z_source</code>, scene ID, VELA stamp ID. A strong correlation converts "D wins" into "the simulator is wrong <em>here</em>." For v9, add D score vs. lens-brightness&ndash;theta_E consistency.</li>
-    <li><strong>v8 vs. v9 shootout:</strong> identical training on both outputs. If v9's Faber&ndash;Jackson consistency closed a real visual gap, v9 should be measurably harder to discriminate — a headline feedback number.</li>
-  </ul>
+  <h3>Idea 4 — The zoom set as a second scale &nbsp;<span class="rec later">CHEAP EXTENSION</span></h3>
+  <p>v13's <code>_zoom</code> renders give every system a lens-centered close-up. Build matching zoom crops of the COWLS reals (catalogue <code>einstein_radius</code> sets the scale) and rerun Idea 1 at arc scale: concentrates capacity on simulated pixels, suppresses background memorization and survey-background cheats. Effectively the old "arc crops" option, except Nate already rendered half of it.</p>
 
-  <h3>Stage 3 — Optional, later: an arc-masked refiner</h3>
-  <p><span class="rec later">ONLY IF NEEDED</span>&nbsp; A generator earns its place only if D plateaus and you want to force it to keep finding <em>new</em> differences. If so: a small residual refiner whose output is multiplied by the arc mask (dilated <code>arcs_{band}.npy</code> footprint) so it is <em>architecturally incapable</em> of touching real pixels — the key contrast with Nate's whole-image refiner. Hinge GAN + L1 preservation inside the mask. Treat its corrections as hypotheses about what's wrong with the arcs, not as products.</p>
+  <h3>Idea 5 — Augmentation as experiment &nbsp;<span class="rec later">TELL SURGERY</span></h3>
+  <p>Because <code>arcs_*</code> is noiseless and separate, we can rebuild training images on the fly: <code>galaxies + &alpha;&middot;arcs + noise</code>. Draw &alpha; from the COWLS-implied flux-ratio distribution and the fixed-0.25 tell (predicted tell #2) is <em>surgically removed without touching the simulator</em>; fresh Poisson draws also randomize the noise seam. Retrain D after each surgery: the accuracy drop measures how much of the gap that single tell explained — a clean, quantitative ranking Nate can act on. (His README suggests exactly this kind of &alpha;-scaling.)</p>
+
+  <h3>Idea 6 — Version shootout: v8 &rarr; v9-4050 &rarr; v13 &nbsp;<span class="rec later">HEADLINE NUMBER</span></h3>
+  <p>Identical training on each generation's output vs. the same real pile. If the consistency fixes (Faber&ndash;Jackson &sigma;_v, unified scenes) closed real visual gaps, discriminability should fall monotonically across versions. One chart, instantly legible to the whole group.</p>
+
+  <h3>Idea 7 — Zero-image checks &nbsp;<span class="rec">START TODAY</span></h3>
+  <p>No training, no cutouts: compare <code>theta_Es.npy</code> against COWLS <code>einstein_radius</code> (v13 tops out at 1.69&Prime;; how much of the real distribution is missing?); the implied arc/lens flux ratios against COWLS lens+source magnitudes; <code>sigma_v</code> and <code>einstein_mass</code> against published lens-sample distributions. Catalog-vs-catalog statistics — publishable feedback this week.</p>
 </section>
 
 <section id="tells">
-  <h2>Predicted tells — feedback you can give before training anything</h2>
-  <p>From reading <code>simulate_v8.py</code> (details and line-level context in the <a href="simulate_v8_explainer.html" style="color:var(--accent);">v8 explainer, &sect;5</a>). These are the differences a discriminator is <em>likely</em> to find, ranked by guessed visibility; each is independently verifiable and actionable by Nate now:</p>
+  <h2>Predicted tells — updated for the v13 code path</h2>
+  <p>From <code>v9_consistent/simulate_v9_consistent.py</code> (line refs current). Three are now <em>acknowledged</em> in Nate's README — the discriminator's job is to rank their visibility and find what's missing from this list:</p>
   <ol>
-    <li><strong>Every lens has the same shape:</strong> SIE ellipticity fixed at (0.05, 0.02), shear fixed at (0.02, 0.01) &rarr; all arcs from one nearly-circular mass family. COWLS lenses span a wide ellipticity range.</li>
-    <li><strong>Fixed arc/lens flux ratio (0.25&times; a peak proxy):</strong> real source-to-lens contrast spans orders of magnitude (verifiable directly from the COWLS per-band lens and source magnitudes).</li>
-    <li><strong>Mass pinned to (0,0), light wherever the real galaxy is:</strong> arcs can curve around a point offset from the visible lens.</li>
-    <li><strong>Arc noise is uncorrelated Poisson; mosaic noise is drizzle-correlated:</strong> the noise texture changes exactly at the arc footprint — a seam a patch discriminator can find.</li>
-    <li><strong>Identical arc morphology in all four bands</strong> (VELA stamps per-band normalized, one analytic SED applied): real star-forming sources are clumpier and bluer in the blue bands.</li>
-    <li><strong>theta_E uncorrelated with lens brightness</strong> in v8 (fixed in v9 — which is what makes the v8-vs-v9 shootout interesting).</li>
+    <li><strong>Every lens has the same shape</strong> — <code>e1, e2 = 0.05, 0.02</code> (L511), <code>gamma1, gamma2 = 0.02, 0.01</code> (L540). Arcs are near-rings; quads/cusps/folds underrepresented. <em>README-acknowledged.</em></li>
+    <li><strong>Fixed arc/lens flux ratio</strong> — <code>target_ratio = 0.25</code> (L574). Real contrast spans decades. <em>README-acknowledged; Idea 5 removes it at training time.</em></li>
+    <li><strong>Fixed source-offset fraction</strong> — <code>src_offset = 0.3 * theta_E</code> (L532), only the angle is random. One impact parameter &rArr; one arc-configuration family. <em>New tell, found in this code read.</em></li>
+    <li><strong>Mass pinned to (0,0)</strong> (L545); the real galaxy is only near center — arcs can curve around a slightly wrong point.</li>
+    <li><strong>Noise seam at the arc footprint</strong> — injected arcs get uncorrelated Poisson noise; JADES mosaic noise is drizzle-correlated. Plus the PSF treatment mismatch (<em>README-acknowledged</em>).</li>
+    <li><strong>Identical arc morphology in all four bands</strong> — per-band-normalized VELA stamps &times; one analytic SED (L552&ndash;637).</li>
+    <li><strong>&theta;_E&ndash;brightness consistency</strong> — v9+ derives &sigma;_v from scene photometry, so this v8 tell <em>should</em> be gone; the shootout (Idea 6) verifies.</li>
   </ol>
-  <p class="muted">If the trained discriminator's heatmaps and correlations land on these, the pipeline works. If it finds something <em>not</em> on this list, that's the discovery worth writing up.</p>
+</section>
+
+<section id="risks">
+  <h2>Risks, re-ranked</h2>
+  <table>
+    <tr><th>Risk</th><th>Status</th><th>Handling</th></tr>
+    <tr><td><strong>Survey gap (JADES sims vs COSMOS reals)</strong></td><td>New #1</td><td>Idea 2b measures it; Idea 1 mitigations; ask for a COSMOS-scene run.</td></tr>
+    <tr><td>Scene memorization</td><td>Reduced, not gone (~6 sims/scene)</td><td>Split by reconstructed scene ID; ask Nate to save <code>scene_idx.npy</code>.</td></tr>
+    <tr><td>440 real lenses, forever</td><td>Unchanged (nature's limit)</td><td>Small D, patch sampling, k-fold, augmentation; imbalance reweighting vs 6k sims.</td></tr>
+    <tr><td>D wins on a boring tell first</td><td>Likely (tells #1&ndash;#3)</td><td>Idea 5 surgically removes known tells so D must dig deeper; each removal is itself a measurement.</td></tr>
+    <tr><td>&theta;_E &gt; 1.7&Prime; absent from sims</td><td>New, quantified</td><td>Restrict the real pile to the matching &theta;_E range, or flag in feedback (needs more massive scene ellipticals).</td></tr>
+  </table>
 </section>
 
 <section id="roadmap">
-  <h2>Practical NERSC roadmap</h2>
+  <h2>Roadmap &amp; asks</h2>
   <ol>
-    <li><strong>Rebuild the prep chain</strong> (mosaics are already on disk): <code>prep_mosaic.py</code> &rarr; <code>prep_stamps_v6.py</code> &rarr; <code>prep_lenses_v8.py</code> &rarr; <code>prep_scenes_v8.py</code>; download VELA archives, then <code>prep_vela_v7.py</code>. Slurm templates: <code>gan/slurm/</code>.</li>
-    <li><strong>Generate sims:</strong> <code>simulate_v8.py --n 92</code> (the cap), and the same via <code>v9_consistent/simulate_v9_consistent.py</code>.</li>
-    <li><strong>Write <code>prep_cowls_cutouts.py</code></strong> (Option B reals) and the held-out scene-style cutouts (Option C reals).</li>
-    <li><strong>Run Option C null test</strong> through the full pipeline — proceed only at ~50%.</li>
-    <li><strong>Stage 0 baseline, then Stage 1 D, then Stage 2 readout</strong> on Option B; Option D for artifact localization.</li>
-    <li><strong>Deliver feedback:</strong> the tells list above (verified/refuted), heatmaps, parameter correlations, the v8-vs-v9 number, and the scene-pool recommendation.</li>
+    <li><strong>Now:</strong> Idea 7 catalog checks; reconstruct scene IDs; extract COWLS cutouts + fresh JADES/COSMOS real cutouts (three small scripts, mosaics on disk).</li>
+    <li><strong>Next:</strong> Idea 2 null tests (gate everything on 2a &asymp; 50%); PCA baselines.</li>
+    <li><strong>Then:</strong> Idea 1 with survey-gap handling; Idea 3 heatmaps; readout report.</li>
+    <li><strong>Later:</strong> Ideas 4&ndash;6 as the report's refinement and headline.</li>
   </ol>
-  <p class="muted">Execution details, PyTorch snippets, loss definitions, and the risk table live in <a href="gan_plan.md" style="color:var(--accent);">gan_plan.md</a> — this document decides <em>what</em> to build and <em>against which data</em>; the plan decides <em>how</em>.</p>
+  <h3>Asks for Nate</h3>
+  <ul>
+    <li>Save <code>scene_idx.npy</code> (and ideally scene RA/Dec) in future runs — one line in the output block.</li>
+    <li>One run on <strong>COSMOS-Web scenes</strong> (the 242 positions in <code>lens_scene_galaxies.csv</code>) to kill the survey gap for the primary comparison.</li>
+    <li>Confirm the zoom-render parameters (FoV/resampling) so we can build matched real-lens zooms for Idea 4.</li>
+    <li>Next simulator iteration, in expected-impact order: vary ellipticity/shear per system; draw the flux ratio from a distribution; vary the source-offset fraction.</li>
+  </ul>
+  <p class="muted">Execution details (losses, splits, code layout) live in <a href="gan_plan.md" style="color:var(--accent);">gan_plan.md</a> — this document decides <em>what</em> to run and <em>against which data</em>. Dataset facts verified 2026-06-10 directly against the CFS arrays; per-file documentation in <code>v9_consistent_4050/README_DATASET.md</code>.</p>
 </section>
 
 </main>

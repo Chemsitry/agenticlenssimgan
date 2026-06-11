@@ -48,6 +48,8 @@ These are exactly the kinds of "tells" our diagnostic discriminator is designed 
 
 ## UPDATE 2026-06-10 — the scene-pool bottleneck and the v9 data workflow
 
+> **SUPERSEDED (same day, late):** Nate's v13-era datasets were found on NERSC at `/global/cfs/projectdirs/deepsrch/natekv/` — **6,961 generated systems (141 GB) on ~400 JADES scenes**, including lensed-heavy runs and lens-centered zoom re-renders. Phases A/B below and the lensed-only patch are **moot** (done by Nate); the new binding constraint is the **JADES-sims vs COSMOS-COWLS survey gap**. See the rewritten [gan_architecture_proposals.html](gan_architecture_proposals.html) ("The new data" + Ideas 1–7) for the current plan of record. The scene-pool numbers below remain useful background.
+
 This section supersedes every dataset-size assumption in the stages below (“M ≈ 30,000”, “`--n 30000`”, etc.), which were written when the simulator could render unlimited fully-synthetic images. In the v8/v9 single-real-scene architecture, dataset size is limited by **how many real elliptical-centered cutouts (“scenes”) exist**, and v8 ships with only 46.
 
 ### What is already sitting in the repo (the colleague half-solved this)
