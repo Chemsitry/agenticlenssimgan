@@ -1,238 +1,86 @@
-# JWST Gravitational Lens Simulation Pipeline
+# JWST Gravitational Lens Simulation — v13 + diagnostic GAN
 
-Multi-band JWST strong gravitational lens simulation pipeline for training ML classifiers. Uses real COSMOS-Web DR0.5 survey data (backgrounds, PSFs, noise) combined with physics-based lensing models calibrated against the COWLS II lens catalogue (Mahler et al. 2025).
+This repo has two jobs:
 
-## Overview
+1. **Hold the current lens simulation (v13)** and the engine that produces it.
+2. **Check how well v13 matches reality**, so Nate can see where his simulator is
+   off — first via fast *catalog-vs-catalog* checks (`catalogCheck.md`), later via
+   a *diagnostic GAN* (`gan_plan.md`).
 
-Strong gravitational lensing occurs when a massive foreground galaxy (the "lens") bends light from a more distant background galaxy (the "source"), producing arcs, rings, or multiple images. This pipeline simulates realistic multi-band images of these systems for training automated lens-finding classifiers.
+Strong gravitational lensing is when a massive foreground galaxy (the **lens**)
+bends light from a more distant background galaxy (the **source**) into arcs or
+rings. v13 simulates multi-band JWST/NIRCam images of such systems (F115W, F150W,
+F277W, F444W) at 630×630 px, 0.03″/px (18.9″ field of view).
 
-Each simulated image contains:
-- A **lens galaxy** (elliptical Sersic profile) with redshift-dependent SED colors
-- A **lensed source** (star-forming Sersic profile) distorted by an SIE+shear mass model
-- **Real sky background** extracted from COSMOS-Web DR0.5 deep mosaics
-- **Empirical PSF** convolution and **Poisson noise** calibrated per band
-- Four NIRCam bands: **F115W** (1.15 um), **F150W** (1.50 um), **F277W** (2.77 um), **F444W** (4.44 um)
+## What "v13" is
 
-Output images are 630x630 pixels at 0.03"/pix (18.9" field of view), matching the panel size in COWLS II Figure 1.
+There is no standalone "v13" codebase. **v13 = the `v9_consistent/` engine
+(`simulate_v9_consistent.py`) run on v13 "unified" source scenes** — JADES DR5
+ellipticals (both GOODS fields) + DESI calibration galaxies, prepared by
+`v9_consistent/prep_scenes_v12.py`. The σ_v that sets each lens's bending
+strength is derived from the lens galaxy's own photometry through a
+Faber–Jackson relation (so lens brightness and lens mass are physically tied).
 
-## Pipeline Versions
+The 2,911-system **output** lives on CFS and is summarized in this repo:
 
-| Version | Description | Image Size | Key Changes |
-|---------|-------------|-----------|-------------|
-| v1 | Single-band F115W prototype | 125x125 | Gaussian PSF, SIS lens, jw01810 data |
-| v2 | Multi-band with SLACS params | 125x125 | Empirical PSF, SIE+shear, COSMOS-Web i2d files |
-| v3 | COWLS-calibrated distributions | 125x125 | DR0.5 deep mosaics, Lyman-break SEDs |
-| v4 | Validated against real COWLS II data | 630x630 | Peak-matched amplitudes, recalibrated SEDs, 18.9" FoV |
-| v5 | SimGAN-refined images | 630x630 | GAN refinement for realistic galaxy morphology |
-| v6 | Real galaxy stamps | 630x630 | INTERPOL real-galaxy stamps replace Sersic profiles |
-| v7 | VELA sources | 630x630 | 20,421 VELA hydrodynamic-simulation stamps as source light |
-| **v8 (current)** | **Single-scene architecture** | **630x630** | **One real JWST cutout per sample; only the arcs are simulated** |
-| v9_consistent (newest, experimental) | Physically consistent lens mass | 630x630 | sigma_v derived from lens photometry via Faber-Jackson; DESI sigma_v where available; stratified theta_E; lives in `v9_consistent/` |
+| Location | Contents |
+|----------|----------|
+| `/global/cfs/projectdirs/deepsrch/natekv/v13_consistent/` | Full run: 4.6 GB image cubes + catalog arrays |
+| `v13_consistent/` (in-repo) | Small catalog arrays (~23 KB each) + `v13_catalog.csv` + docs |
 
-## What's New in v6-v9 (merged 2026-06-09)
+See `v13_consistent/README.md` for the array dictionary and important caveats
+(e.g. `photom_*` is lens-only AB mag; the arc/lens flux ratio is hard-coded to
+0.25, not lensing-derived).
 
-- **v8 architectural rethink** (`simulate_v8.py`): stop stitching separate lens + background cutouts. Each sample is ONE real 630x630 JWST cutout ("scene"); the central lens galaxy is untouched real pixels and only the lensed source is simulated and added. Eliminates prior artifacts (force fields, chunky halos, noise doubling, visible boxes).
-- **v9_consistent** (`v9_consistent/`): in v8 the lens cutout's appearance had no relation to the sigma_v used in the SIE mass model. v9 derives sigma_v from the cutout's F115W/F150W/F277W photometry via a Faber-Jackson relation calibrated on DESI x JWST galaxies, with an inter-band consistency rejection gate and stratified theta_E sampling.
-- **Output naming (v8+):** `sources_{band}.npy` was renamed `arcs_{band}.npy`. Per-band outputs: `images_{band}.npy` (composite), `galaxies_{band}.npy` (real scene only), `arcs_{band}.npy` (simulated arcs only).
+## Repo layout
 
-### Bug fixes (v6-v8)
+| Path | Purpose |
+|------|---------|
+| `v13_consistent/` | v13 catalog snapshot + `build_catalog_csv.py` |
+| `v9_consistent/` | The simulation engine + Faber–Jackson calibration that makes v13 |
+| `catalogCheck.md` | **Plan: quantitative catalog-vs-real comparison (do today, zero new images)** |
+| `catalog_checks.py` | **Runnable implementation of the 3 catalog checks** (numpy core; optional scipy/matplotlib) |
+| `referenceData.md` | Where each comparison number comes from (COWLS columns, published σ_v samples, which COWLS2 figure) |
+| `gan_plan.md` | Plan: diagnostic GAN that learns where sim ≠ real JWST |
+| `gan/` | Diagnostic GAN code (data prep, baselines, slurm) |
+| `gan_architecture_proposals.html` | v13-era proposals for the diagnostic comparison |
+| `cowls_catalogue.csv` | Real comparison catalog: 385 COWLS lenses w/ θ_E + 4-band lens & source mags + magnification |
+| `COWLS2.pdf` | COWLS II paper (Mahler et al. 2025) |
+| `COWLS2im.jpeg` | COWLS II **Figure 1** — the 17-spectacular-lenses montage (visual reference only) |
+| `slides/` | Group-meeting slides |
 
-| Fix | Bug |
-|---|---|
-| v6 stamp augmentation | Rotation/flip was drawn per band, so one galaxy had different orientations in each of the 4 bands (non-physical). Now decided once per system. |
-| v8 source SED | `starforming_color_ratios()` was computed but never applied; arcs had identical flux in all bands. Arcs now show Lyman-break dropout and Balmer break. |
-| v8 scene pool | Stars (JWST diffraction spikes) passed the concentration filter and appeared as central "lens galaxies". Removed via a compactness cut (flux(r<3)/flux(r<15) in F444W, threshold 0.35). |
-| v8 duplicates | Non-lensed images sampled scenes with replacement, producing pixel-identical duplicates. Scenes are now assigned without replacement. |
+## The engine (`v9_consistent/`)
 
-## What Was New in v4
+| File | Purpose |
+|------|---------|
+| `simulate_v9_consistent.py` | Main pipeline: real scene + simulated arc; σ_v from Faber–Jackson |
+| `prep_scenes_v12.py` | Builds the v13 unified source-scene pool |
+| `cutout_photometry.py` | Lens-cutout sim-units → AB mag per band |
+| `fit_calibration.py`, `calibration.py`, `fj_params.json` | Faber–Jackson fit + σ_v(mags, z) |
+| `export_csvs.py` | Human-readable galaxy catalogs (calibration + lens scenes) |
+| `resume_simulation.py` | Restart a partial run |
 
-- **SED color ratios recalibrated** against PyAutoLens-decomposed photometry from the COWLS II catalogue (440 real lens systems). Our `elliptical_color_ratios()` and `starforming_color_ratios()` functions now match real data within the observed scatter.
-- **Peak-matched amplitude calibration** validated against a real COWLS II lens (Lens E), replacing the unconstrained stellar mass formula from v3.
-- **630x630 px images** (18.9" FoV) matching the COWLS II paper's panel size.
-- **Fixed arc/lens ratio** (0.25) ensuring visible arcs across all parameter combinations.
-- **Source SED with Balmer break** — rest-frame optical break boost produces realistic red colors at z > 1, matching observed source photometry.
+## Validating v13 against reality
+
+The source galaxies (VELA/JADES) and the comparison lenses (COWLS) come from
+**different datasets**, so we compare **distributions and scaling relations**,
+not image-to-image. Two stages:
+
+- **Now — catalog vs catalog (`catalogCheck.md`).** Compare v13's Einstein radii,
+  arc/lens flux ratios, and σ_v / Einstein-mass against COWLS and published lens
+  samples (SLACS/BELLS/SL2S). Zero new images required.
+- **Later — diagnostic GAN (`gan_plan.md`).** Train a discriminator to find the
+  image features where v13 still disagrees with real JWST cutouts.
 
 ## Setup
 
-### Prerequisites
-
-- Python 3.10+ (tested with 3.14)
-- macOS (Apple Silicon M3 tested) or Linux
-- ~170 GB disk for raw COSMOS-Web mosaics (or use pre-extracted data)
-
-### Installation
-
 ```bash
-# Clone and enter repo
-git clone <repo-url>
-cd "data prep"
-
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install numpy scipy astropy lenstronomy matplotlib
-
-# For GAN training (v5), also install:
-pip install torch torchvision pandas
+python3 -m venv .venv && source .venv/bin/activate
+pip install numpy scipy astropy lenstronomy matplotlib pandas
 ```
 
-### Data
-
-Large data files are excluded from git (see `.gitignore`). You need:
-
-| Directory | Contents | Size | How to Get |
-|-----------|----------|------|------------|
-| `raw_data/1727_mosaic/` | COSMOS-Web DR0.5 full mosaics (4 bands) | ~170 GB | MAST archive, program 1727 |
-| `prepped_mosaic_630/` | Extracted backgrounds (2000/band) + PSFs | ~13 GB | Run `prep_mosaic.py` |
-| `prepped_mosaic_224/` | Smaller backgrounds + real galaxy stamps | ~4 GB | Run `prep_mosaic.py --size 224` |
-| `output/` | Generated simulation outputs | varies | Run `simulate_v4.py` |
-
-## Usage
-
-### Step 1: Prep Data
-
-Extract backgrounds and PSFs from the DR0.5 mosaics:
-
-```bash
-.venv/bin/python3 prep_mosaic.py
-```
-
-This produces `prepped_mosaic_630/` with per-band subdirectories containing:
-- `backgrounds.npy` — 2000 random 630x630 sky patches (float32)
-- `psf_median.npy` — Median-stacked empirical PSF (63x63)
-- `psf_stars.npy` — 200 individual PSF star cutouts (63x63)
-
-### Step 2: Generate Simulations
-
-```bash
-# Generate 10 test images (quick check)
-.venv/bin/python3 simulate_v4.py
-
-# Generate full training dataset
-.venv/bin/python3 simulate_v4.py --n 2000
-
-# Custom: 5000 images with specific seed
-.venv/bin/python3 simulate_v4.py --n 5000 --seed 123
-```
-
-Output in `output/v4/`:
-
-| File | Shape | Description |
-|------|-------|-------------|
-| `images_F115W.npy` | (N, 630, 630) | Simulated images per band |
-| `images_F150W.npy` | (N, 630, 630) | |
-| `images_F277W.npy` | (N, 630, 630) | |
-| `images_F444W.npy` | (N, 630, 630) | |
-| `sources_F115W.npy` | (N, 630, 630) | Source-only (ground truth) per band |
-| `lensed.npy` | (N,) | Binary labels: 1=lensed, 0=non-lensed |
-| `theta_Es.npy` | (N,) | Einstein radius in arcsec |
-| `z_lens.npy` | (N,) | Lens redshift |
-| `z_source.npy` | (N,) | Source redshift |
-| `masses.npy` | (N,) | log10(halo mass / M_sun) |
-| `metadata.json` | — | Full configuration and parameter distributions |
-| `preview_*.png` | — | RGB composite grid for visual inspection |
-
-Half the images are lensed (lens + arcs + background), half are non-lensed (lens galaxy + background only).
-
-### Step 3: Validate (Optional)
-
-Compare simulated SEDs against real COWLS II photometry:
-
-```bash
-# SED comparison plot: real COWLS II vs our model
-.venv/bin/python3 plot_real_seds.py
-
-# Single-band F115W validation against a real COWLS II lens
-.venv/bin/python3 validate_f115w.py
-```
-
-### Step 4: GAN Refinement (v5, Experimental)
-
-Refine simulated images using a SimGAN trained on real galaxy morphology:
-
-```bash
-# Prepare training data (center crops of sims + galaxy-centered crops of real backgrounds)
-.venv/bin/python3 prep_gan_data.py
-
-# Train SimGAN refiner (200 epochs, ~90 min on M3)
-.venv/bin/python3 train_simgan.py --epochs 200 --batch 8 --bands all --out_dir output/v5
-
-# Apply trained refiner to create v5 dataset
-.venv/bin/python3 refine_dataset.py --input output/v4 --output output/v5
-```
-
-## Key Files
-
-### Simulation Pipeline
-
-| File | Purpose |
-|------|---------|
-| `simulate_v8.py` | **Main simulation pipeline** (v8) — real scene + simulated arcs |
-| `v9_consistent/simulate_v9_consistent.py` | Newest pipeline (v9) — photometry-consistent lens mass |
-| `prep_scenes_v8.py` / `prep_lenses_v8.py` | Build the v8 real-scene pool (with star/compactness filtering) |
-| `prep_vela_v7.py` | Extract VELA hydrodynamic-simulation source stamps |
-| `simulate_v7.py` / `simulate_v6.py` / `simulate_v4.py` / `simulate_v3.py` | Previous pipelines (preserved) |
-| `prep_mosaic.py` | Extract backgrounds/PSFs from DR0.5 mosaics |
-| `validate_f115w.py` | Single-band validation against real COWLS II Lens E |
-
-### Analysis & Visualization
-
-| File | Purpose |
-|------|---------|
-| `plot_seds.py` | Plot simulated SED color ratios (lens + source populations) |
-| `plot_real_seds.py` | Compare real COWLS II SEDs vs simulated model |
-| `cowls_catalogue.csv` | COWLS II catalogue: 440 lens candidates with 4-band photometry |
-| `COWLS2.pdf` | Reference paper (Mahler et al. 2025) |
-
-### GAN Refinement (v5)
-
-| File | Purpose |
-|------|---------|
-| `prep_gan_data.py` | Prepare training data for SimGAN |
-| `train_simgan.py` | SimGAN training: refiner + PatchGAN discriminator |
-| `refine_dataset.py` | Apply trained refiner to create refined dataset |
-
-### Diagnostic GAN (sim-vs-real feedback)
-
-| File | Purpose |
-|------|---------|
-| `gan_plan.md` | Staged plan: train a discriminator to find where the simulator disagrees with real JWST data |
-| `gan_architecture_proposals.html` | What to build now (v8/v9 era): which real dataset to compare against (options A-E) + recommended discriminator |
-| `simulate_v8_explainer.html` | v8 pipeline & data explainer: inputs, outputs, hard-coded quirks |
-| `gan/` | Diagnostic GAN code (data prep, audits, PCA baseline, slurm scripts) |
-
-### ML Training
-
-| File | Purpose |
-|------|---------|
-| `train_cvae.py` | Conditional VAE for lens image generation (PyTorch) |
-| `eval_generative.ipynb` | cVAE evaluation: power spectra, reconstructions, t-SNE |
-
-## Physics Parameters (v4)
-
-All parameter distributions are calibrated against the COWLS survey (Nightingale et al. 2025) and COWLS II (Mahler et al. 2025):
-
-| Parameter | Distribution | Range | Description |
-|-----------|-------------|-------|-------------|
-| z_lens | TruncNorm(0.7, 0.4) | [0.05, 2.5] | Lens redshift |
-| z_source | TruncNorm(2.5, 1.5) | [0.5, 7.0] | Source redshift |
-| sigma_v | TruncNorm(180, 50) km/s | [80, 350] | Velocity dispersion |
-| theta_E | Derived from sigma_v | [0.5, 1.5] arcsec | Einstein radius (post-filter) |
-| log10(M_halo) | Uniform | [11.0, 13.0] | Halo mass |
-| UV slope | Normal(-0.5, 1.0) | [-2.5, 1.5] | Source UV spectral slope |
-
-### SED Color Ratios
-
-Lens galaxies (elliptical, recalibrated against COWLS II):
-```
-F150W/F115W = 1.68 + 0.09 * z_lens
-F277W/F115W = 8.79 + 8.40 * z_lens
-F444W/F115W = 0.42 + 18.11 * z_lens
-```
-
-Source galaxies include Lyman-break dropout suppression and Balmer/4000A break boost for rest-frame optical wavelengths.
+`v13_consistent/build_catalog_csv.py` needs only numpy + the standard library and
+runs in the bare environment.
 
 ## References
 

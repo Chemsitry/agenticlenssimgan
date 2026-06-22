@@ -1,0 +1,28 @@
+{
+  "version": "v9_consistent",
+  "n_images": 2911,
+  "image_size": 630,
+  "pixel_scale": 0.03,
+  "fov_arcsec": 18.9,
+  "bands": [
+    "F115W",
+    "F150W",
+    "F277W",
+    "F444W"
+  ],
+  "params": {
+    "z_lens": "TruncNorm(0.7, 0.4, [0.05, 2.5])",
+    "scenes_source": "v13 unified (JADES DR5 w/ CSV photo_z, both fields + DESI calibration galaxies)",
+    "z_source": "VELA stamp native redshift (z=1/scale-1, range 1-4), selected with z_source > z_lens+0.1",
+    "sigma_v": "Photometry-derived per cutout (FJ slope=-10, intercepts in fj_params.json); fallback range [80, 350] km/s",
+    "theta_E_filter": "[0.5, 2.5] arcsec",
+    "sigma_consistency_max_dex": 0.4,
+    "photom_aperture_px": 60,
+    "photom_sky_annulus": [
+      70,
+      95
+    ],
+    "calibration_params_path": "/Users/nathankvinnesland/Desktop/data prep v9_consistent/fj_params.json",
+    "einstein_mass_msun": "projected mass within theta_E (M_sun): M_E = c^2/(4G) (D_d D_s / D_ds) theta_E^2, Planck18"
+  }
+}
