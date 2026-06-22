@@ -46,6 +46,14 @@ try:
 except Exception:
     HAVE_SCIPY = False
 
+try:
+    import astropy.units as u
+    import astropy.constants as const
+    from astropy.cosmology import Planck18 as _COSMO
+    HAVE_ASTROPY = True
+except Exception:
+    HAVE_ASTROPY = False
+
 # ---- paths & constants -----------------------------------------------------
 REPO = Path(__file__).resolve().parent
 CAT = REPO / "v13_consistent" / "catalog"
@@ -102,6 +110,47 @@ def load_cowls():
     cow = {k: np.array([_to_float(r.get(k, "")) for r in rows]) for k in keys}
     cow["code"] = np.array([r.get("code", "") for r in rows])
     return cow
+
+
+def einstein_mass_msun(zl, zs, theta_arcsec):
+    """Projected mass inside theta_E: M_E = (c^2/4G) theta^2 Dd Ds / Dds (needs astropy)."""
+    Dd = _COSMO.angular_diameter_distance(zl)
+    Ds = _COSMO.angular_diameter_distance(zs)
+    Dds = _COSMO.angular_diameter_distance_z1z2(zl, zs)
+    theta = (np.asarray(theta_arcsec) * u.arcsec).to(u.rad).value
+    M = (const.c ** 2 / (4 * const.G)) * (theta ** 2) * (Dd * Ds / Dds)
+    return M.to(u.Msun).value
+
+
+def load_published_sigma():
+    """Load published_sigma.csv (real lens sample) for Check 3, if present.
+
+    Built by fetch_published_sigma.py (SLACS, Bolton+2008). Returns None if the
+    file is absent so Check 3 falls back to literature ranges.
+    """
+    path = REPO / "published_sigma.csv"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
+        return None
+    sv = np.array([_to_float(r.get("sigma_v_kms", "")) for r in rows])
+    zl = np.array([_to_float(r.get("z_lens", "")) for r in rows])
+    zs = np.array([_to_float(r.get("z_source", "")) for r in rows])
+    te = np.array([_to_float(r.get("theta_E_arcsec", "")) for r in rows])
+    ok = np.isfinite(sv) & (sv > 0)
+    out = {"sample": rows[0].get("sample", "published"), "sigma_v_kms": sv[ok],
+           "z_lens": zl[ok], "z_source": zs[ok], "theta_E_arcsec": te[ok]}
+    if HAVE_ASTROPY:
+        good = (np.isfinite(out["z_lens"]) & np.isfinite(out["z_source"])
+                & np.isfinite(out["theta_E_arcsec"]) & (out["theta_E_arcsec"] > 0))
+        M = np.full(len(out["sigma_v_kms"]), np.nan)
+        if good.any():
+            M[good] = einstein_mass_msun(out["z_lens"][good], out["z_source"][good],
+                                         out["theta_E_arcsec"][good])
+        out["M_E"] = M
+    return out
 
 
 # ---- small stats helpers ---------------------------------------------------
@@ -211,7 +260,8 @@ def check2(sim, cow, summary, intrinsic=True, measure_cubes=False, cube_sample=3
     if HAVE_MPL:
         fig, ax = plt.subplots(figsize=(7, 5))
         data = [cow_meds[b] for b in BANDS]
-        ax.boxplot(data, labels=list(BANDS), showfliers=False, whis=(10, 90))
+        ax.boxplot(data, showfliers=False, whis=(10, 90))
+        ax.set_xticks(range(1, len(BANDS) + 1)); ax.set_xticklabels(list(BANDS))
         ax.axhline(ARC_LENS_ANCHOR, ls="--", color="C0", label="v13 anchor 0.25 (F444W)")
         if sim_meds:
             xs = range(1, len(BANDS) + 1)
@@ -268,6 +318,21 @@ def check3(sim, cow, summary):
     for name, (med, lo, hi) in PUBLISHED_SIGMA.items():
         print("    published %-26s median~%d  range~[%d, %d]" % (name, med, lo, hi))
 
+    pub = load_published_sigma()
+    if pub is not None:
+        psig = pub["sigma_v_kms"]
+        D = ks_d(sig, psig)
+        p = float(ks_2samp(sig, psig).pvalue) if HAVE_SCIPY else float("nan")
+        print("  published_sigma.csv [%s]: n=%d  median=%.0f km/s"
+              % (pub["sample"], len(psig), np.median(psig)))
+        print("  KS  v13 vs published sigma_v:  D=%.3f  p=%s"
+              % (D, ("%.2e" % p) if p == p else "n/a (no scipy)"))
+        summary.append(("3_sigma", "published_median_kms", float(np.median(psig)), "", pub["sample"]))
+        summary.append(("3_sigma", "KS_vs_published_D", D, p, "real two-sample test"))
+    else:
+        pub = None
+        print("  (no published_sigma.csv found -> run fetch_published_sigma.py for a real KS test)")
+
     m = sim["mass"] > 0
     slope, b0 = np.polyfit(np.log10(sig[m]), np.log10(sim["mass"][m]), 1)
     print("  v13 log10(M_E) vs log10(sigma_v): slope=%.2f (SIE physics expects ~4)" % slope)
@@ -290,20 +355,25 @@ def check3(sim, cow, summary):
         fig, axes = plt.subplots(1, 2, figsize=(12, 5))
         ax = axes[0]
         bins = np.linspace(40, 470, 44)
-        ax.hist(sig, bins=bins, alpha=0.6, label="v13 sigma_v (clipped)", color="C0")
-        ax.hist(phot[np.isfinite(phot)], bins=bins, histtype="step", color="C1",
+        ax.hist(sig, bins=bins, density=True, alpha=0.6, label="v13 sigma_v (clipped)", color="C0")
+        ax.hist(phot[np.isfinite(phot)], bins=bins, density=True, histtype="step", color="C1",
                 label="v13 Faber-Jackson (un-clipped)")
+        if pub is not None:
+            ax.hist(pub["sigma_v_kms"], bins=bins, density=True, histtype="step", color="C3",
+                    lw=2, label="%s (n=%d)" % (pub["sample"], len(pub["sigma_v_kms"])))
         ax.axvline(350, ls="--", color="k"); ax.axvline(80, ls=":", color="gray")
-        for name, (med, lo, hi) in PUBLISHED_SIGMA.items():
-            ax.axvspan(lo, hi, alpha=0.05, color="C3")
-        ax.axvline(PUBLISHED_SIGMA["SLACS (Auger+2009)"][0], ls="-", color="C3", lw=1, label="SLACS median")
-        ax.set_xlabel("sigma_v (km/s)"); ax.set_ylabel("count")
+        ax.set_xlabel("sigma_v (km/s)"); ax.set_ylabel("normalized density")
         ax.set_title("Check 3a: sigma_v distribution"); ax.legend(fontsize=8); ax.grid(alpha=0.3)
 
         ax = axes[1]
         ax.scatter(np.log10(sig[m]), np.log10(sim["mass"][m]), s=4, alpha=0.2, color="C0", label="v13")
         xfit = np.array([np.log10(sig[m].min()), np.log10(sig[m].max())])
-        ax.plot(xfit, b0 + slope * xfit, "k-", label="fit slope=%.2f" % slope)
+        ax.plot(xfit, b0 + slope * xfit, "k-", label="v13 fit slope=%.2f" % slope)
+        if pub is not None and "M_E" in pub:
+            ok = np.isfinite(pub["M_E"]) & (pub["M_E"] > 0)
+            if ok.any():
+                ax.scatter(np.log10(pub["sigma_v_kms"][ok]), np.log10(pub["M_E"][ok]),
+                           s=18, color="C3", edgecolor="k", lw=0.3, zorder=5, label=pub["sample"])
         ax.set_xlabel("log10 sigma_v (km/s)"); ax.set_ylabel("log10 M_E (M_sun)")
         ax.set_title("Check 3b: Einstein mass vs sigma_v"); ax.legend(); ax.grid(alpha=0.3)
         _save(fig, "sigma_mass.png")

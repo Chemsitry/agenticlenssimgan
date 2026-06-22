@@ -100,7 +100,7 @@ Check 3 needs.
 
 | Sample | Reference | What to grab | Where |
 |--------|-----------|--------------|-------|
-| **SLACS** | Auger et al. 2009, ApJ 705, 1099 (sample: Bolton et al. 2008, ApJ 682, 964) | σ_v (SDSS), z_lens, z_source, θ_E for ~85 lenses | VizieR (search "SLACS Auger 2009", cat. `J/ApJ/705/1099`) |
+| **SLACS** *(used)* | Bolton et al. 2008, ApJ 682, 964 | σ_v (SDSS), z_lens, z_source, θ_E | VizieR `J/ApJ/682/964` (table4 ⋈ table5) — **auto-fetched** by `fetch_published_sigma.py` |
 | **BELLS** | Brownstein et al. 2012, ApJ 744, 41 | σ_v, z_lens, z_source, θ_E | VizieR / paper Table |
 | **SL2S** | Sonnenfeld et al. 2013, ApJ 777, 98 (+2015) | σ_v, z_lens, z_source, θ_E | VizieR / paper Table |
 
@@ -109,21 +109,32 @@ dispersions (aperture-corrected). v13's σ_v is an SIE *model* dispersion derive
 from lens photometry via Faber–Jackson. For ellipticals these agree to ~5–10%,
 but they are not identical definitions — don't over-read a small median offset.
 
-### Drop-in for a real test
-To upgrade Check 3 from "range comparison" to a proper two-sample KS test,
-download one table (SLACS is easiest) and save it as `published_sigma.csv` in the
-repo root with at least this column:
-
+### The Check 3 data file (`published_sigma.csv`) — already built
+Run once on a login node (needs internet):
+```bash
+python3 fetch_published_sigma.py      # downloads VizieR J/ApJ/682/964 -> published_sigma.csv
 ```
-sample,sigma_v_kms,z_lens,z_source,theta_E_arcsec
-SLACS,  285,        0.241, 0.531,   1.15
-SLACS,  246,        0.195, 0.613,   1.02
-...
+This writes **62 grade-A SLACS lenses** (σ median 245 km/s [160–396], θ_E median
+1.19″, z_lens 0.06–0.36) with columns:
 ```
+sample,name,sigma_v_kms,sigma_v_err,z_lens,z_source,theta_E_arcsec,grade
+```
+`catalog_checks.py` Check 3 picks this file up automatically and then:
+- runs a real two-sample KS test, v13 vs SLACS — current result **D=0.206,
+  p≈0.01** (v13 median 265 vs SLACS 245: v13 is shifted high and truncated at
+  the 350 clip while SLACS reaches 396);
+- overlays the SLACS Einstein masses (computed from z_lens, z_source, θ_E via
+  `astropy.cosmology.Planck18`) on the M_E–σ_v panel. SLACS sits slightly below
+  v13 at fixed σ_v — partly real, partly geometry (SLACS lenses are low-z).
 
-Then `catalog_checks.py` Check 3 can `ks_2samp(v13_sigma, published_sigma)` and,
-if you include `z_source`, you can also compute Einstein masses for the published
-lenses (and even for the COWLS 17 from Table 1) for a like-for-like M_E check.
+**To extend:** append BELLS/SL2S rows with the same columns (or add fetchers) and
+Check 3 will include them automatically; with `z_source` present every sample
+also gets an Einstein mass for the M_E comparison.
+
+**σ_v definition caveat (again):** SLACS σ_v here is the raw SDSS-fibre value
+(uncorrected for aperture); v13's is an SIE/Faber–Jackson model dispersion. Close
+for ellipticals, not identical — read the KS result as "distributions differ
+modestly," not "v13 is wrong by D."
 
 ---
 
@@ -136,4 +147,4 @@ lenses (and even for the COWLS 17 from Table 1) for a like-for-like M_E check.
 | COWLS catalogue (numbers) | `cowls_catalogue.csv` |
 | COWLS II Figure 1 (17-lens montage) | `COWLS2im.jpeg` |
 | COWLS II paper | `COWLS2.pdf` |
-| Published σ_v samples | external — download per §3 into `published_sigma.csv` |
+| Published σ_v sample (SLACS) | `published_sigma.csv` (built by `fetch_published_sigma.py` from VizieR `J/ApJ/682/964`) |

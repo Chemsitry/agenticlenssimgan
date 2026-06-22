@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Where is v13 off from real lenses? — catalog checks</title>
+<style>
+:root{
+  --cy:#5ff;
+  --fg:#f2f2f2;
+  --mut:#a8a8a8;
+  --line:#333;
+  --panel:#0d0d0d;
+  --warn:#ffb84d;
+  --bad:#ff5f7a;
+  --ok:#7CFFB2;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-snap-type:y mandatory;}
+body{background:#000;color:var(--fg);font-family:"Segoe UI",-apple-system,Helvetica,Arial,sans-serif;font-size:1.3rem;line-height:1.45;}
+.slide{height:100vh;overflow:auto;scroll-snap-align:start;padding:2.5rem 4vw 1.5rem;display:flex;flex-direction:column;border-bottom:1px solid #1a1a1a;}
+.slide-tag{color:var(--mut);font-size:.85rem;letter-spacing:.2em;text-transform:uppercase;}
+h1{font-size:2.7rem;font-weight:700;line-height:1.18;margin:.5rem 0 1rem;}
+h2{font-size:2.2rem;margin:.3rem 0 .6rem;}
+h1 em,h2 em{color:var(--cy);font-style:normal;}
+h3{font-size:1.3rem;margin-bottom:.4rem;}
+.sub{color:var(--mut);margin-bottom:1rem;}
+.row{display:flex;gap:1.5rem;align-items:stretch;flex:1;min-height:0;}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;gap:1rem;}
+.box{border:1px solid var(--line);background:var(--panel);padding:.9rem 1.1rem;}
+.accent{border-left:4px solid var(--cy);}
+.accent-ok{border-left:4px solid var(--ok);}
+.accent-warn{border-left:4px solid var(--warn);}
+.accent-bad{border-left:4px solid var(--bad);}
+.box p{color:var(--mut);font-size:1.15rem;}
+.box p b{color:var(--fg);}
+.kicker{letter-spacing:.22em;text-transform:uppercase;font-size:.85rem;margin-bottom:.5rem;}
+.kicker.cy{color:var(--cy);} .kicker.ok{color:var(--ok);} .kicker.warn{color:var(--warn);} .kicker.bad{color:var(--bad);}
+table{border-collapse:collapse;width:100%;font-size:1.1rem;}
+th,td{border:1px solid var(--line);padding:.5rem .8rem;text-align:left;vertical-align:top;}
+th{background:#121212;}
+td{color:var(--mut);}
+td b{color:var(--fg);}
+.warn{color:var(--warn);} .bad{color:var(--bad);} .ok{color:var(--ok);} .cy{color:var(--cy);}
+.tell{border:1px solid var(--line);background:var(--panel);padding:.65rem 1rem;display:flex;align-items:flex-start;gap:.9rem;margin-bottom:.7rem;}
+.tell b.no{font-size:1.4rem;min-width:1.4rem;line-height:1.3;}
+.tell .t{flex:1;font-size:1.2rem;}
+.tell .t small{display:block;color:var(--mut);font-size:1.02rem;margin-top:.15rem;}
+.figure{border:1px solid var(--line);background:#fff;padding:.5rem;display:flex;flex-direction:column;min-height:0;border-radius:3px;}
+.figure.dark{background:#000;}
+.figure img{display:block;max-width:100%;height:auto;object-fit:contain;margin:0 auto;min-height:0;}
+.figure figcaption{color:var(--mut);font-size:1rem;margin-top:.5rem;padding:0 .3rem;}
+.figure.dark figcaption{color:var(--mut);}
+.figure figcaption b{color:var(--fg);}
+.figure.dark figcaption b{color:var(--fg);}
+.statline{display:flex;gap:1.4rem;flex-wrap:wrap;margin:.4rem 0 .2rem;}
+.stat{display:flex;flex-direction:column;}
+.stat .v{font-size:1.7rem;font-weight:700;color:var(--fg);}
+.stat .v.cy{color:var(--cy);} .stat .v.bad{color:var(--bad);} .stat .v.ok{color:var(--ok);} .stat .v.warn{color:var(--warn);}
+.stat .l{color:var(--mut);font-size:.95rem;}
+.steps{counter-reset:st;list-style:none;}
+.steps li{counter-increment:st;display:flex;gap:1rem;margin-bottom:.9rem;align-items:flex-start;}
+.steps li::before{content:counter(st);color:var(--cy);border:1px solid var(--cy);min-width:2.2rem;height:2.2rem;display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto;}
+.steps li .b{flex:1;font-size:1.22rem;}
+.steps li .b small{display:block;color:var(--mut);font-size:1rem;margin-top:.15rem;}
+.steps .eff{color:var(--cy);font-size:1rem;white-space:nowrap;align-self:center;}
+.steps .eff.warn{color:var(--warn);}
+.foot{margin-top:auto;padding-top:1rem;display:flex;justify-content:space-between;color:#555;font-size:.85rem;gap:1rem;}
+ul.plain{list-style:none;color:var(--mut);font-size:1.12rem;}
+ul.plain li{margin-bottom:.5rem;}
+ul.plain b{color:var(--fg);}
+.tag{display:inline-block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;border:1px solid currentColor;padding:.08rem .45rem;border-radius:3px;vertical-align:middle;}
+#dots{position:fixed;right:1rem;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;z-index:5;}
+#dots a{width:9px;height:9px;border:1px solid #444;display:block;}
+#dots a.on{background:var(--cy);border-color:var(--cy);}
+</style>
+</head>
+<body>
+<div id="dots">
+  <a href="#s1" class="on"></a><a href="#s2"></a><a href="#s3"></a><a href="#s4"></a><a href="#s5"></a><a href="#s6"></a>
+</div>
+
+<!-- ============================ SLIDE 1 ============================ -->
+<section class="slide" id="s1">
+  <div class="slide-tag">1 / 6 &middot; catalog checks &middot; june 22, 2026</div>
+  <h1>Where is v13 off from <em>real</em> lenses?</h1>
+  <p class="sub" style="font-size:1.4rem;">Three catalog-vs-catalog checks &mdash; <b style="color:var(--fg)">zero new images generated</b>.</p>
+
+  <div class="row">
+    <figure class="figure dark" style="flex:1.5;">
+      <img src="assets/cowls_montage.jpeg" alt="COWLS II Figure 1 — 17 real JWST lenses" style="max-height:58vh;">
+      <figcaption>Our <b>real</b> reference: COWLS II (Mahler+2025), Fig.&nbsp;1 &mdash; spectacular JWST lenses. <b>These 17 are a best-case subset</b>; all distributions below use the full <b>385-lens</b> catalogue. <span style="color:#666;">Credit: Gozaliasl &amp; Virolainen.</span></figcaption>
+    </figure>
+    <div class="col" style="justify-content:center;">
+      <div class="box accent">
+        <h3>Why not just compare images?</h3>
+        <p>v13's sources (JADES/VELA) and the real lenses (COWLS) are <b>different surveys with different selection</b>. So we compare <b>distributions &amp; scaling relations</b> &mdash; physics that should hold regardless of which survey the galaxies came from.</p>
+      </div>
+      <div class="box">
+        <h3>The three checks</h3>
+        <p><b class="cy">1</b> &middot; Einstein radius &theta;<sub>E</sub><br><b class="cy">2</b> &middot; velocity dispersion &sigma;<sub>v</sub> &amp; Einstein mass<br><b class="cy">3</b> &middot; arc / lens flux ratio</p>
+        <p style="margin-top:.5rem;font-size:1.02rem;">Samples: <b>2,500</b> v13 lensed &middot; <b>385</b> COWLS &middot; <b>62</b> SLACS.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>catalogCheck.md &middot; catalog_checks.py</span><span>press &darr; to advance</span></div>
+</section>
+
+<!-- ============================ SLIDE 2 ============================ -->
+<section class="slide" id="s2">
+  <div class="slide-tag">2 / 6 &middot; check 1</div>
+  <h2>Einstein radius: <em>two</em> separate problems</h2>
+  <p class="sub">&theta;<sub>E</sub> is the one-number measure of lens strength. Compared on the overlapping range &theta;<sub>E</sub>&nbsp;&ge;&nbsp;0.5&Prime; (v13 simulates [0.5,&nbsp;2.5]&Prime; by design).</p>
+
+  <div class="row">
+    <figure class="figure" style="flex:1.3;">
+      <img src="assets/check1_thetaE.png" alt="Einstein-radius CDF: v13 vs COWLS" style="max-height:60vh;">
+      <figcaption>Cumulative &theta;<sub>E</sub> for v13 (blue) vs COWLS (red). The whole blue curve sits <b>right of</b> red, and stops dead at the dashed ceiling.</figcaption>
+    </figure>
+    <div class="col">
+      <div class="tell"><b class="no warn">A</b><span class="t"><b>Shape shift</b> &mdash; v13 median <b>1.10&Prime;</b> vs real <b>0.73&Prime;</b><small>v13 over-produces large arcs, under-produces small ones. KS&nbsp;D&nbsp;=&nbsp;0.366, p&nbsp;&asymp;&nbsp;3&times;10<sup>&minus;22</sup> &mdash; &ldquo;same distribution&rdquo; firmly rejected.</small></span></div>
+      <div class="tell"><b class="no bad">B</b><span class="t"><b>Truncation</b> &mdash; v13 stops at <b>1.69&Prime;</b>, COWLS reaches <b>2.25&Prime;</b><small><b class="bad">4.6%</b> of comparable real lenses (9 of 195) lie beyond v13's ceiling &mdash; exactly the massive group / cluster-scale regime.</small></span></div>
+      <div class="box accent-warn">
+        <p class="kicker warn">caveat &mdash; keep it honest</p>
+        <p>COWLS is visually graded &amp; JWST-selected. The 4.6% is <b>&ldquo;of COWLS lenses with &theta;<sub>E</sub>&nbsp;&ge;&nbsp;0.5&Prime;&rdquo;</b> &mdash; a <b>lower bound</b>, not an absolute sky rate. <span class="cy">Problem&nbsp;B's root cause &rarr; next slide.</span></p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>v13 n=2,500 &middot; COWLS(&theta;<sub>E</sub>&ge;0.5) n=195</span><span>2 / 6</span></div>
+</section>
+
+<!-- ============================ SLIDE 3 ============================ -->
+<section class="slide" id="s3">
+  <div class="slide-tag">3 / 6 &middot; check 3 &middot; the diagnosis</div>
+  <h2>Why the tail is missing &mdash; and the <em>one-line fix</em></h2>
+  <p class="sub">&sigma;<sub>v</sub> sets lens strength (&theta;<sub>E</sub>&nbsp;&prop;&nbsp;&sigma;<sub>v</sub>&sup2;) and is the cleanest survey-independent cross-check.</p>
+
+  <div class="row">
+    <figure class="figure" style="flex:1.45;">
+      <img src="assets/check3_sigma_mass.png" alt="sigma_v distribution and M_E–sigma_v scaling" style="max-height:58vh;">
+      <figcaption><b>Left:</b> v13's clipped &sigma;<sub>v</sub> (blue) is sliced off at 350, but its own Faber&ndash;Jackson values (orange) run well past it. <b>Right:</b> M<sub>E</sub>&ndash;&sigma;<sub>v</sub> matches SLACS.</figcaption>
+    </figure>
+    <div class="col">
+      <div class="box accent-ok">
+        <p class="kicker ok">the bulk is right</p>
+        <p>M<sub>E</sub>&ndash;&sigma;<sub>v</sub> log-log slope = <b class="ok">4.00</b> (SIE physics predicts 4). Median &sigma;<sub>v</sub> <b>265</b> vs SLACS <b>245</b> km/s; median log M<sub>E</sub> <b>11.6</b> (SLACS 10.8&ndash;11.7). <b>v13 gets the central scaling right.</b></p>
+      </div>
+      <div class="box accent-bad">
+        <p class="kicker bad">the diagnosis</p>
+        <p>v13 <b>clips &sigma;<sub>v</sub> at 350&nbsp;km/s</b>, yet the Faber&ndash;Jackson values it already computes reach <b class="bad">461&nbsp;km/s</b>. That clip is the mechanical cause of the &theta;<sub>E</sub> ceiling in Check&nbsp;1.</p>
+      </div>
+      <div class="box accent">
+        <p class="kicker cy">the fix</p>
+        <p>COWLS's largest &theta;<sub>E</sub> (2.25&Prime;) needs &sigma;<sub>v</sub>&nbsp;&asymp;&nbsp;350&middot;&radic;(2.25/1.69)&nbsp;&asymp;&nbsp;<b class="cy">405&nbsp;km/s</b> &mdash; inside FJ's 461. <b>Raise the clip 350&nbsp;&rarr;&nbsp;~410&ndash;460</b> and the missing tail returns, from numbers v13 currently discards.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span class="warn">caveat: published &sigma;<sub>v</sub> are spectroscopic-stellar; v13's is an SIE/FJ model value &mdash; agree ~5&ndash;10% for ellipticals, so don't over-read the 265-vs-245 offset.</span><span>3 / 6</span></div>
+</section>
+
+<!-- ============================ SLIDE 4 ============================ -->
+<section class="slide" id="s4">
+  <div class="slide-tag">4 / 6 &middot; check 2</div>
+  <h2>Arc brightness is anchored in the <em>wrong band</em></h2>
+  <p class="sub">v13 does not <i>predict</i> arc brightness &mdash; it <b>hard-codes</b> arc flux = 0.25 &times; the lens, set at F444W.</p>
+
+  <div class="row">
+    <figure class="figure" style="flex:1.3;">
+      <img src="assets/check2_fluxratio.png" alt="COWLS arc/lens flux ratio per band vs v13 anchor" style="max-height:58vh;">
+      <figcaption>Real COWLS arc/lens ratio per band (boxes) vs v13's flat <b>0.25</b> anchor (dashed). Real arcs are <b>bright in blue, faint in red</b>; v13's anchor sits at the red end where real arcs are faintest.</figcaption>
+    </figure>
+    <div class="col">
+      <div class="statline">
+        <div class="stat"><span class="v">0.20</span><span class="l">COWLS F115W / F150W</span></div>
+        <div class="stat"><span class="v">0.075</span><span class="l">COWLS F277W / F444W</span></div>
+        <div class="stat"><span class="v bad">3.3&times;</span><span class="l">v13 too bright @ F444W</span></div>
+      </div>
+      <div class="box accent-bad">
+        <p class="kicker bad">headline</p>
+        <p>At F444W v13 arcs are <b>~3.3&times; too bright</b> (0.25 vs 0.075). The blue/red trend is physical: red elliptical <b>lenses</b>, blue star-forming <b>arcs</b>.</p>
+      </div>
+      <div class="box accent-warn">
+        <p class="kicker warn">conjecture <span class="tag">unverified</span></p>
+        <p>Anchoring at the <i>reddest</i> band may also <b>invert the band trend</b> vs reality. Confirming needs aperture photometry on the existing cubes (follow-up&nbsp;2b &mdash; <b>not yet run</b>).</p>
+      </div>
+      <div class="box accent">
+        <p class="kicker cy">the fix</p>
+        <p>Move the flux anchor to a <b>blue band</b> and set per-band ratios from this COWLS table (~0.20 blue, ~0.075 red).</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>uses delensed (intrinsic) source mags &times; &mu; &mdash; interp&nbsp;A, per COWLS docs &middot; wide IQRs &rarr; compare distributions, not medians</span><span>4 / 6</span></div>
+</section>
+
+<!-- ============================ SLIDE 5 ============================ -->
+<section class="slide" id="s5">
+  <div class="slide-tag">5 / 6 &middot; for nate</div>
+  <h2>Recommendations &mdash; <em>ranked by impact &divide; effort</em></h2>
+  <p class="sub">Three concrete changes. The first two are catalog-grounded today; the third is flagged as investigation.</p>
+
+  <div class="row">
+    <div class="col" style="flex:1.6;">
+      <ol class="steps">
+        <li><span class="b"><b class="cy">Raise the &sigma;<sub>v</sub> clip 350 &rarr; ~410&ndash;460&nbsp;km/s</b><small>Recovers essentially the entire missing &theta;<sub>E</sub> tail (Check&nbsp;1&nbsp;B) using Faber&ndash;Jackson values v13 already computes but throws away.</small></span><span class="eff">~1 line</span></li>
+        <li><span class="b"><b class="cy">Re-anchor the arc flux to a blue band</b><small>Replace the flat 0.25 @ F444W with per-band COWLS ratios (~0.20 blue, ~0.075 red) so the arc SED carries the observed blue-bright / red-faint trend.</small></span><span class="eff">small</span></li>
+        <li><span class="b"><b class="warn">Investigate the &theta;<sub>E</sub> shape-shift</b> <span class="tag warn" style="color:var(--warn)">hypothesis</span><small>Beyond the clip, v13's median &theta;<sub>E</sub> is high (1.10&Prime; vs 0.73&Prime;). Likely the &sigma;<sub>v</sub> / stratified-&theta;<sub>E</sub> sampling &mdash; needs a look, not yet pinned down.</small></span><span class="eff warn">investigate</span></li>
+      </ol>
+    </div>
+    <div class="col">
+      <div class="box accent-ok">
+        <h3 class="ok">What v13 already gets right</h3>
+        <ul class="plain">
+          <li>&bull; M<sub>E</sub>&ndash;&sigma;<sub>v</sub> slope = <b>4.00</b> (matches SIE physics)</li>
+          <li>&bull; Central &sigma;<sub>v</sub> / Einstein-mass scale (vs SLACS)</li>
+          <li>&bull; Same SIE + shear mass family as the COWLS fits</li>
+        </ul>
+        <p style="margin-top:.4rem;">So these are <b>targeted tweaks</b>, not a rebuild.</p>
+      </div>
+      <div class="box">
+        <p>All numbers reproduce from <b style="color:var(--fg)">catalog_checks.py</b> &mdash; numpy core, runs in the bare login env; scipy only for KS p-values.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>fixes live in v9_consistent/simulate_v9_consistent.py (clip + target_ratio)</span><span>5 / 6</span></div>
+</section>
+
+<!-- ============================ SLIDE 6 ============================ -->
+<section class="slide" id="s6">
+  <div class="slide-tag">6 / 6 &middot; defensibility</div>
+  <h2>What's <em>solid</em>, what's a <em>conjecture</em></h2>
+  <p class="sub">So every claim can be defended at the meeting.</p>
+
+  <div class="row">
+    <div class="col box accent-ok">
+      <p class="kicker ok">measured &mdash; solid</p>
+      <ul class="plain">
+        <li>&bull; All headline numbers, computed on <b>2,500</b> v13 + <b>385</b> COWLS + <b>62</b> SLACS lenses</li>
+        <li>&bull; KS tests (scipy): &theta;<sub>E</sub> <b>D=0.37</b>, &sigma;<sub>v</sub> <b>D=0.21</b></li>
+        <li>&bull; M<sub>E</sub>&ndash;&sigma;<sub>v</sub> slope <b>4.00</b>; FJ max <b>461</b> km/s</li>
+        <li>&bull; Reproducible, numpy-only core</li>
+      </ul>
+    </div>
+    <div class="col box accent-warn">
+      <p class="kicker warn">conjecture &mdash; flagged</p>
+      <ul class="plain">
+        <li>&bull; Band trend <b>inverted</b> &mdash; needs cube photometry (2b, not run)</li>
+        <li>&bull; Shape-shift cause = &sigma;<sub>v</sub> sampling &mdash; <b>hypothesis</b></li>
+        <li>&bull; Clip fix recovers &ldquo;essentially all&rdquo; the tail &mdash; assumes &theta;<sub>E</sub>&prop;&sigma;<sub>v</sub>&sup2; with distances held fixed</li>
+      </ul>
+    </div>
+    <div class="col box">
+      <p class="kicker">caveats &mdash; locked</p>
+      <ul class="plain">
+        <li>&bull; Selection: tail fraction is COWLS-relative, a <b>lower bound</b></li>
+        <li>&bull; &sigma;<sub>v</sub> definitions differ ~5&ndash;10% (spectroscopic vs FJ model)</li>
+        <li>&bull; Source mags = <b>delensed</b> (interp A, per COWLS docs)</li>
+        <li>&bull; 17-lens montage is best-case &rarr; distributions use full 385</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="sub" style="margin-top:1.2rem;font-size:1.3rem;">Bottom line: <b style="color:var(--fg)">v13's central physics is sound</b> &mdash; the gaps are a missing high-&sigma;<sub>v</sub> tail and a mis-anchored arc color, <b style="color:var(--cy)">both fixable with values it already computes</b>.</p>
+  <div class="foot"><span>repo: Chemsitry/agenticlenssimgan &middot; 2026-06-22 &middot; refs: catalogCheck.md, referenceData.md</span><span>6 / 6 &middot; end</span></div>
+</section>
+
+<script>
+const slides=[...document.querySelectorAll('.slide')];
+const dots=[...document.querySelectorAll('#dots a')];
+let cur=0;
+function go(i){cur=Math.max(0,Math.min(slides.length-1,i));slides[cur].scrollIntoView({behavior:'smooth'});}
+document.addEventListener('keydown',e=>{
+  if(['ArrowDown','ArrowRight','PageDown'].includes(e.key)){e.preventDefault();go(cur+1);}
+  if(['ArrowUp','ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();go(cur-1);}
+});
+window.addEventListener('scroll',()=>{
+  const mid=window.scrollY+window.innerHeight/2;
+  let i=0;
+  slides.forEach((s,j)=>{if(s.offsetTop<=mid)i=j;});
+  cur=i;
+  dots.forEach((d,j)=>d.classList.toggle('on',j===cur));
+});
+dots.forEach((d,j)=>d.addEventListener('click',e=>{e.preventDefault();go(j);}));
+</script>
+</body>
+</html>

@@ -39,7 +39,9 @@ See `v13_consistent/README.md` for the array dictionary and important caveats
 | `v13_consistent/` | v13 catalog snapshot + `build_catalog_csv.py` |
 | `v9_consistent/` | The simulation engine + Faber–Jackson calibration that makes v13 |
 | `catalogCheck.md` | **Plan: quantitative catalog-vs-real comparison (do today, zero new images)** |
-| `catalog_checks.py` | **Runnable implementation of the 3 catalog checks** (numpy core; optional scipy/matplotlib) |
+| `catalog_checks.py` | **Runnable implementation of the 3 catalog checks** (numpy core; optional scipy/matplotlib/astropy) |
+| `fetch_published_sigma.py` | Builds `published_sigma.csv` (62 grade-A SLACS lenses) from VizieR for Check 3 |
+| `published_sigma.csv` | Real SLACS σ_v + z + θ_E comparison sample (Bolton+2008) |
 | `referenceData.md` | Where each comparison number comes from (COWLS columns, published σ_v samples, which COWLS2 figure) |
 | `gan_plan.md` | Plan: diagnostic GAN that learns where sim ≠ real JWST |
 | `gan/` | Diagnostic GAN code (data prep, baselines, slurm) |
