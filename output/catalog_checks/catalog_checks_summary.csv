@@ -1,0 +1,16 @@
+check,quantity,v13_value,real_value,note
+1_thetaE,median_arcsec,1.1002941655535101,0.7295183591013381,sim higher = lenses too strong
+1_thetaE,max_arcsec,1.6865098667534384,2.2481978820695163,v13 truncated at sigma_v clip
+1_thetaE,frac_COWLS_above_ceiling,0.046153846153846156,,real tail v13 cannot make
+1_thetaE,KS_D / p,0.36613333333333326,3.328691460396846e-22,shape difference
+2_fluxratio,COWLS_median_F115W,0.19623631049562498,,v13 anchors only F444W
+2_fluxratio,COWLS_median_F150W,0.19755189706211235,,v13 anchors only F444W
+2_fluxratio,COWLS_median_F277W,0.07510145434338686,,v13 anchors only F444W
+2_fluxratio,COWLS_median_F444W,0.07488174014114223,0.25,v13 anchors only F444W
+3_sigma,published_median_kms,245.0,,SLACS (Bolton+2008)
+3_sigma,KS_vs_published_D,0.2058193548387096,0.01002297705526012,real two-sample test
+3_sigma,median_kms,265.3380657508459,243,vs SLACS
+3_sigma,frac_at_clip_350,0.0048,,truncated tail
+3_sigma,FJ_unclipped_max,461.4551493609117,,available but discarded
+3_mass,M_E_sigma_slope,3.9994666683736377,4.0,SIE expectation
+3_mass,median_log10_M_E,11.586056766768118,,SLACS ~10.8-11.7

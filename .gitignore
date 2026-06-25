@@ -1,13 +1,12 @@
 # Virtual environment
 .venv/
 
-# Data (too large for git)
+# Large input data (too large for git) -- outputs in output/ ARE tracked
 raw_data/
 prepped_mosaic/
 prepped_mosaic_*/
 prepped_cosmicwebb/
 prepped/
-output/
 MAST_2026-02-26T2313/
 MAST_2026-02-26T2313.zip
 
